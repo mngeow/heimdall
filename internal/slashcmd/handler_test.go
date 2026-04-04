@@ -1,9 +1,13 @@
 package slashcmd
 
 import (
+	"context"
+	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/mngeow/symphony/internal/config"
+	"github.com/mngeow/symphony/internal/store"
 )
 
 func TestParser(t *testing.T) {
@@ -119,4 +123,104 @@ func TestAuthorizer(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIntakeProcess(t *testing.T) {
+	ctx := context.Background()
+	runtimeStore, err := store.New(":memory:")
+	if err != nil {
+		t.Fatalf("store.New() error = %v", err)
+	}
+	defer runtimeStore.Close()
+
+	if err := runtimeStore.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	queue := store.NewJobQueue(runtimeStore)
+	intake := NewIntake(runtimeStore, queue, slog.Default())
+	repoConfig := config.RepoConfig{
+		AllowedUsers:  []string{"alice"},
+		AllowedAgents: []string{"gpt-5.4"},
+	}
+	pr := &store.PullRequest{ID: 11, Number: 42}
+
+	t.Run("authorized command queues once", func(t *testing.T) {
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", "alice", "/opsx-apply --agent gpt-5.4")
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result.Status != "queued" {
+			t.Fatalf("expected queued status, got %q", result.Status)
+		}
+		if result.Job == nil {
+			t.Fatal("expected job to be enqueued")
+		}
+
+		job, err := queue.Dequeue(ctx)
+		if err != nil {
+			t.Fatalf("Dequeue() error = %v", err)
+		}
+		if job == nil || job.JobType != "pr_command_apply" {
+			t.Fatalf("expected pr_command_apply job, got %#v", job)
+		}
+	})
+
+	t.Run("duplicate observation is ignored", func(t *testing.T) {
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", "alice", "/opsx-apply --agent gpt-5.4")
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if !result.Duplicate || result.Status != "duplicate" {
+			t.Fatalf("expected duplicate result, got %+v", result)
+		}
+	})
+
+	t.Run("edited command stays duplicate by identity", func(t *testing.T) {
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", "alice", "/symphony refine updated text")
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if !result.Duplicate {
+			t.Fatalf("expected edited comment to remain duplicate, got %+v", result)
+		}
+	})
+
+	t.Run("unauthorized command is rejected", func(t *testing.T) {
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_2", "mallory", "/symphony status")
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result.Status != "rejected" {
+			t.Fatalf("expected rejected status, got %q", result.Status)
+		}
+
+		stored, err := runtimeStore.GetCommandRequestByDedupeKey(ctx, CommandDedupeKey("IC_2"))
+		if err != nil {
+			t.Fatalf("GetCommandRequestByDedupeKey() error = %v", err)
+		}
+		if stored == nil || stored.AuthorizationStatus != "rejected" {
+			t.Fatalf("expected rejected request to be persisted, got %#v", stored)
+		}
+	})
+
+	t.Run("plain comment is ignored", func(t *testing.T) {
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_3", "alice", "looks good to me")
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result.Status != "ignored" {
+			t.Fatalf("expected ignored status, got %q", result.Status)
+		}
+
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+		defer cancel()
+		job, err := queue.Dequeue(ctx)
+		if err != nil {
+			t.Fatalf("Dequeue() error = %v", err)
+		}
+		if job != nil {
+			t.Fatalf("expected no queued job for plain comment, got %#v", job)
+		}
+	})
 }

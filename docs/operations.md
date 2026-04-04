@@ -9,8 +9,8 @@ Recommended shape:
 - systemd-managed binary
 - local SQLite database file
 - local repo mirrors and worktrees
-- inbound HTTPS for GitHub webhooks
-- outbound HTTPS to GitHub and Linear APIs
+- outbound HTTPS to GitHub and Linear APIs for the standard workflow path
+- optional private HTTP endpoints for health and readiness
 
 ## Host Prerequisites
 
@@ -48,7 +48,7 @@ Example:
 ```yaml
 server:
   listen_address: ":8080"
-  public_url: "https://symphony.example.com"
+  public_url: "http://127.0.0.1:8080"
 
 storage:
   driver: sqlite
@@ -62,8 +62,9 @@ linear:
     - "ENG"
 
 github:
-  webhook_path: "/webhooks/github"
   base_branch: "main"
+  poll_interval: 30s
+  lookback_window: 2m
 
 repos:
   - name: "github.com/acme/platform"
@@ -83,6 +84,8 @@ Notes:
 
 - if only one repo is configured, routing may skip team matching
 - if multiple repos are configured, routing rules should be explicit and validated at startup
+- GitHub polling should be scoped to managed repositories and managed pull requests to control API volume
+- `public_url` does not need to be Internet-reachable when GitHub polling is used; a private or local operator URL is enough if the field is needed at all
 - secrets should stay outside the file when possible
 
 ## Health And Observability
@@ -132,7 +135,7 @@ The bare mirrors are rebuildable from GitHub. The SQLite database is the critica
 
 ## Operational Risks To Call Out Early
 
-- GitHub webhooks still require public ingress even though Linear is polled
+- GitHub polling intervals and lookback windows must be sized to avoid missed commands and unnecessary API pressure
 - a broken local OpenCode installation blocks propose, refine, and apply workflows
 - stale repo mirrors can create confusing branch failures if fetch and prune are not enforced
 - if the machine clock is wrong, polling windows and audit timestamps become unreliable

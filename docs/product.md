@@ -22,7 +22,7 @@ The happy path for V1 is intentionally small:
 3. Symphony creates a branch in the configured GitHub repository.
 4. Symphony generates a new OpenSpec change from the Linear issue title and description.
 5. Symphony commits the generated artifacts and opens a pull request against `main`.
-6. The engineer refines the spec from GitHub comments.
+6. The engineer refines the spec from GitHub comments, which Symphony discovers during polling.
 7. When ready, the engineer triggers `/opsx-apply` from the PR with an allowed agent.
 8. Symphony commits the resulting changes back to the same branch.
 
@@ -36,6 +36,7 @@ To keep V1 easy to operate and easy to adopt, the design makes these choices:
 - one local config file plus environment-backed secrets
 - SQLite by default, so a single Linux VM is enough to run the system
 - polling for Linear to avoid requiring public ingress from Linear
+- polling for GitHub PR command intake to avoid requiring public ingress from GitHub
 - slash commands in GitHub so the refinement loop stays in the PR
 - deterministic branch names and change names so retries reconcile instead of duplicating work
 - one open automation PR per issue per repository
@@ -54,7 +55,7 @@ To keep V1 easy to operate and easy to adopt, the design makes these choices:
 - a custom browser UI for workflow control
 - automatic merge or automatic deployment after PR creation
 - deep project-management features inside Symphony
-- real-time Linear webhooks in the first release
+- real-time Linear or GitHub webhooks in the first release
 - arbitrary shell access from GitHub comments
 
 ## Default V1 Conventions

@@ -182,7 +182,7 @@ erDiagram
 
 ### `provider_cursors`
 
-Stores the current polling position for each provider scope, such as a Linear team or a global cursor.
+Stores the current polling position for each provider scope, such as a Linear team or a GitHub repository poll scope.
 
 ### `repositories`
 
@@ -206,7 +206,7 @@ This is the record that ties together the work item, branch name, change name, a
 
 ### `pull_requests`
 
-Stores GitHub PR identity and state so Symphony can reconcile comment events and PR lifecycle changes.
+Stores GitHub PR identity and state so Symphony can reconcile polled comment activity and PR lifecycle changes.
 
 ### `command_requests`
 
@@ -244,7 +244,7 @@ Stores append-only audit records that answer who requested a change, which agent
 ## What Does Not Belong In SQLite
 
 - GitHub App private keys
-- webhook secrets
+- installation tokens
 - Linear API keys
 - static repo routing rules
 - allowed GitHub users and agents

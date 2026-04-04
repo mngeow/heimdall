@@ -8,7 +8,7 @@ In the initial design, Symphony:
 - generates an OpenSpec change from the issue title and description
 - commits and pushes the generated spec artifacts
 - opens a GitHub pull request to `main`
-- listens for GitHub PR comments to refine specs or run `/opsx-apply` with an allowed agent
+- polls GitHub for new PR comments on Symphony-managed pull requests so it can refine specs or run `/opsx-apply` with an allowed agent
 - commits any resulting changes back to the same branch
 
 ## Confirmed V1 Decisions
@@ -16,6 +16,7 @@ In the initial design, Symphony:
 - Deployment model: single-user service on one Linux host
 - Linear trigger model: polling, not Linear webhooks
 - GitHub authentication: GitHub App
+- GitHub PR command intake: polling, not GitHub webhooks
 - Linear authentication: API key from a dedicated Linear service account plus local service config
 - OpenCode and OpenSpec execution: local CLI on the host
 - PR interaction model: slash commands in GitHub PR comments
@@ -23,7 +24,7 @@ In the initial design, Symphony:
 
 ## Important Note
 
-Linear is polled in V1, but GitHub comment handling still requires an inbound GitHub webhook endpoint so Symphony can react to PR comments.
+Linear and GitHub PR command intake are both polling-based in V1, so the standard deployment path does not require a public inbound webhook endpoint.
 
 ## Document Map
 
@@ -35,7 +36,7 @@ Linear is polled in V1, but GitHub comment handling still requires an inbound Gi
 - `logging.md`: logging strategy, log fields, retention, and how to view Symphony logs
 - `extensibility.md`: how V1 stays ready for Jira, other SCMs, and remote execution later
 - `setup/README.md`: operator setup order for Linux host, GitHub, and Linear
-- `setup/github.md`: exact GitHub App, webhook, and repository setup
+- `setup/github.md`: exact GitHub App, polling, and repository setup
 - `setup/linear.md`: exact Linear account, API key, and state-mapping setup
 - `setup/linux-host.md`: Linux host dependencies and server preparation checklist
 - `database/README.md`: database design overview

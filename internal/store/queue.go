@@ -135,3 +135,8 @@ func CreateIssueLockKey(provider, workItemKey string) string {
 func CreateRepoLockKey(repoRef string) string {
 	return fmt.Sprintf("repo:%s", repoRef)
 }
+
+// CreatePullRequestLockKey creates a lock key for pull-request-scoped operations.
+func CreatePullRequestLockKey(pullRequestID int64) string {
+	return fmt.Sprintf("pr:%d", pullRequestID)
+}

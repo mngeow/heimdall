@@ -9,7 +9,7 @@ Reasons:
 - short-lived installation tokens are safer than long-lived PATs
 - repo access can be granted per installation
 - permissions are easier to reason about and audit
-- webhook support is part of the normal GitHub App model
+- installation-scoped API access fits Symphony's polling-based GitHub model
 
 ## Recommended GitHub App Permissions
 
@@ -24,24 +24,25 @@ Possible later additions:
 
 - Checks: read and write, if Symphony starts publishing richer execution status
 
-## GitHub Event Intake
+## GitHub Poll Intake
 
-Symphony should receive at least:
+Symphony should poll for at least:
 
-- `issue_comment` for slash commands on pull requests
-- `pull_request` for reconciliation and future branch state handling
+- pull request comments through GitHub's issue-comment model for slash commands on pull requests
+- pull request state for reconciliation and future branch state handling
 
-The webhook handler must:
+The GitHub polling path must:
 
-- verify the GitHub webhook signature before parsing JSON
-- reject unknown event types early
-- avoid logging full raw payloads that may contain sensitive content
+- use GitHub App installation authentication for API reads
+- filter candidate comments down to Symphony-managed pull requests before mutation logic runs
+- dedupe by stable comment identity rather than timestamp alone
+- avoid logging full raw comment or API payload bodies that may contain sensitive content
 
 ## How GitHub Auth Is Used
 
 GitHub App auth is needed in two places:
 
-- GitHub API calls for creating PRs, posting comments, and inspecting repo state
+- GitHub API calls for polling comments, inspecting PR state, creating PRs, posting comments, and inspecting repo state
 - local git push operations back to the branch
 
 For git push, Symphony should mint an installation token on demand and use HTTPS remotes such as:
@@ -94,7 +95,6 @@ Recommended secret set:
 - `SYMPHONY_GITHUB_APP_ID`
 - `SYMPHONY_GITHUB_INSTALLATION_ID` if a single installation is used
 - `SYMPHONY_GITHUB_PRIVATE_KEY_FILE`
-- `SYMPHONY_GITHUB_WEBHOOK_SECRET`
 - `SYMPHONY_LINEAR_API_TOKEN`
 
 The service should never:

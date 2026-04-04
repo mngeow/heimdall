@@ -94,10 +94,10 @@ V1 should default to `info`.
 Symphony logs must never contain:
 
 - GitHub App private keys
-- webhook secrets
 - Linear API keys
 - raw installation tokens
-- full unredacted webhook bodies
+- full unredacted pull request comment bodies
+- full unredacted GitHub or Linear API payload bodies
 
 If a failure must reference a secret-backed path, log the file path only, not the secret content.
 
