@@ -102,7 +102,11 @@ func (s *Store) SavePullRequest(ctx context.Context, pr *PullRequest) error {
 		`INSERT INTO pull_requests (repository_id, repo_binding_id, provider, provider_pr_node_id, number, title, base_branch, head_branch, state, url)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(repository_id, number) DO UPDATE SET
+		 repo_binding_id = excluded.repo_binding_id,
+		 provider_pr_node_id = excluded.provider_pr_node_id,
 		 title = excluded.title,
+		 base_branch = excluded.base_branch,
+		 head_branch = excluded.head_branch,
 		 state = excluded.state,
 		 url = excluded.url`,
 		pr.RepositoryID, pr.RepoBindingID, pr.Provider, pr.ProviderPRNodeID, pr.Number, pr.Title, pr.BaseBranch, pr.HeadBranch, pr.State, pr.URL,
@@ -112,8 +116,17 @@ func (s *Store) SavePullRequest(ctx context.Context, pr *PullRequest) error {
 	}
 
 	if pr.ID == 0 {
-		id, _ := result.LastInsertId()
-		pr.ID = id
+		if id, _ := result.LastInsertId(); id > 0 {
+			pr.ID = id
+		} else {
+			existing, err := s.GetPullRequestByNumber(ctx, pr.RepositoryID, pr.Number)
+			if err != nil {
+				return err
+			}
+			if existing != nil {
+				pr.ID = existing.ID
+			}
+		}
 	}
 	return nil
 }
@@ -150,8 +163,17 @@ func (s *Store) SaveCommandRequest(ctx context.Context, req *CommandRequest) err
 	}
 
 	if req.ID == 0 {
-		id, _ := result.LastInsertId()
-		req.ID = id
+		if id, _ := result.LastInsertId(); id > 0 {
+			req.ID = id
+		} else {
+			existing, err := s.GetCommandRequestByDedupeKey(ctx, req.DedupeKey)
+			if err != nil {
+				return err
+			}
+			if existing != nil {
+				req.ID = existing.ID
+			}
+		}
 	}
 	return nil
 }

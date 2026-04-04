@@ -2,97 +2,291 @@ package github
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
 
-	"github.com/google/go-github/v57/github"
+	"github.com/golang-jwt/jwt/v5"
+	gh "github.com/google/go-github/v57/github"
 	"github.com/mngeow/symphony/internal/config"
 )
 
-// Client wraps GitHub App authentication and API operations
+var defaultGitHubAPIBaseURL = mustParseURL("https://api.github.com/")
+
+// Client wraps GitHub App authentication and API operations.
 type Client struct {
 	appID          string
-	privateKey     []byte
-	webhookSecret  string
-	client         *github.Client
 	installationID int64
+	privateKey     *rsa.PrivateKey
+	httpClient     *http.Client
+	apiBaseURL     *url.URL
+	now            func() time.Time
 }
 
-// NewClient creates a new GitHub client
+// NewClient creates a new GitHub client.
 func NewClient(cfg config.GitHubConfig) (*Client, error) {
+	if cfg.AppID == "" {
+		return nil, fmt.Errorf("github app id not configured")
+	}
+	if cfg.InstallationID == 0 {
+		return nil, fmt.Errorf("github installation id not configured")
+	}
+	if cfg.PrivateKey == "" {
+		return nil, fmt.Errorf("github private key not configured")
+	}
+
+	privateKey, err := parsePrivateKey([]byte(cfg.PrivateKey))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse github private key: %w", err)
+	}
+
 	return &Client{
-		appID:         cfg.AppID,
-		privateKey:    []byte(cfg.PrivateKey),
-		webhookSecret: cfg.WebhookSecret,
+		appID:          cfg.AppID,
+		installationID: cfg.InstallationID,
+		privateKey:     privateKey,
+		httpClient:     http.DefaultClient,
+		apiBaseURL:     defaultGitHubAPIBaseURL,
+		now:            time.Now,
 	}, nil
 }
 
-// VerifyWebhookSignature validates the GitHub webhook signature
-func (c *Client) VerifyWebhookSignature(payload []byte, signature string) error {
-	if c.webhookSecret == "" {
-		return fmt.Errorf("webhook secret not configured")
+// GetInstallationToken retrieves an installation token for API operations.
+func (c *Client) GetInstallationToken(ctx context.Context) (string, error) {
+	appJWT, err := c.signAppJWT()
+	if err != nil {
+		return "", err
 	}
 
-	// Signature format: "sha256=<hex>"
-	if len(signature) < 7 || signature[:7] != "sha256=" {
-		return fmt.Errorf("invalid signature format")
+	endpoint, err := c.apiBaseURL.Parse(fmt.Sprintf("app/installations/%d/access_tokens", c.installationID))
+	if err != nil {
+		return "", fmt.Errorf("failed to build installation token endpoint: %w", err)
 	}
 
-	expectedMAC := hmac.New(sha256.New, []byte(c.webhookSecret))
-	expectedMAC.Write(payload)
-	expectedSig := hex.EncodeToString(expectedMAC.Sum(nil))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create installation token request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+appJWT)
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	if !hmac.Equal([]byte(signature[7:]), []byte(expectedSig)) {
-		return fmt.Errorf("signature verification failed")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to request installation token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("installation token request failed with status %s", resp.Status)
+	}
+
+	var payload struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", fmt.Errorf("failed to decode installation token response: %w", err)
+	}
+	if payload.Token == "" {
+		return "", fmt.Errorf("installation token response did not include a token")
+	}
+
+	return payload.Token, nil
+}
+
+// ListIssueCommentsSince lists repository issue comments updated since the given time.
+func (c *Client) ListIssueCommentsSince(ctx context.Context, owner, repo string, since time.Time) ([]*gh.IssueComment, error) {
+	apiClient, err := c.newAPIClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	options := &gh.IssueListCommentsOptions{
+		Sort:      gh.String("updated"),
+		Direction: gh.String("asc"),
+		Since:     &since,
+		ListOptions: gh.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	var comments []*gh.IssueComment
+	for {
+		pageComments, response, err := apiClient.Issues.ListComments(ctx, owner, repo, 0, options)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list issue comments for %s/%s: %w", owner, repo, err)
+		}
+		comments = append(comments, pageComments...)
+		if response.NextPage == 0 {
+			break
+		}
+		options.Page = response.NextPage
+	}
+
+	return comments, nil
+}
+
+// CreatePullRequest creates or updates a pull request.
+func (c *Client) CreatePullRequest(ctx context.Context, owner, repo, title, head, base, body string) (*gh.PullRequest, error) {
+	apiClient, err := c.newAPIClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	pullRequest, _, err := apiClient.PullRequests.Create(ctx, owner, repo, &gh.NewPullRequest{
+		Title: gh.String(title),
+		Head:  gh.String(head),
+		Base:  gh.String(base),
+		Body:  gh.String(body),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pull request for %s/%s: %w", owner, repo, err)
+	}
+
+	return pullRequest, nil
+}
+
+// CreateComment adds a comment to a pull request.
+func (c *Client) CreateComment(ctx context.Context, owner, repo string, number int, body string) error {
+	apiClient, err := c.newAPIClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = apiClient.Issues.CreateComment(ctx, owner, repo, number, &gh.IssueComment{Body: gh.String(body)})
+	if err != nil {
+		return fmt.Errorf("failed to create comment on %s/%s#%d: %w", owner, repo, number, err)
 	}
 
 	return nil
 }
 
-// GetInstallationToken retrieves an installation token for API operations
-func (c *Client) GetInstallationToken(ctx context.Context) (string, error) {
-	// TODO: Implement JWT generation and installation token exchange
-	// This requires parsing the private key and making a GitHub API call
-	return "", fmt.Errorf("installation token not yet implemented")
-}
-
-// WebhookEvent represents a parsed webhook event
-type WebhookEvent struct {
-	Type       string
-	Action     string
-	Payload    interface{}
-	DeliveryID string
-}
-
-// ParseWebhook parses a GitHub webhook payload
-func (c *Client) ParseWebhook(eventType string, payload []byte) (*WebhookEvent, error) {
-	event, err := github.ParseWebHook(eventType, payload)
+// GetPullRequest retrieves a pull request by number.
+func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number int) (*gh.PullRequest, error) {
+	apiClient, err := c.newAPIClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse webhook: %w", err)
+		return nil, err
 	}
 
-	return &WebhookEvent{
-		Type:    eventType,
-		Payload: event,
-	}, nil
+	pullRequest, _, err := apiClient.PullRequests.Get(ctx, owner, repo, number)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pull request %s/%s#%d: %w", owner, repo, number, err)
+	}
+
+	return pullRequest, nil
 }
 
-// CreatePullRequest creates or updates a pull request
-func (c *Client) CreatePullRequest(ctx context.Context, owner, repo, title, head, base, body string) (*github.PullRequest, error) {
-	// TODO: Implement using go-github client with installation token
-	return nil, fmt.Errorf("not yet implemented")
+func (c *Client) newAPIClient(ctx context.Context) (*gh.Client, error) {
+	token, err := c.GetInstallationToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	httpClient := &http.Client{
+		Transport: &installationTransport{
+			token: token,
+			base:  transportForClient(c.httpClient),
+		},
+	}
+
+	apiClient := gh.NewClient(httpClient)
+	apiClient.BaseURL = cloneURL(c.apiBaseURL)
+	apiClient.UploadURL = cloneURL(c.apiBaseURL)
+	return apiClient, nil
 }
 
-// CreateComment adds a comment to a pull request
-func (c *Client) CreateComment(ctx context.Context, owner, repo string, number int, body string) error {
-	// TODO: Implement using go-github client
-	return fmt.Errorf("not yet implemented")
+func (c *Client) signAppJWT() (string, error) {
+	now := c.now().UTC()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
+		IssuedAt:  jwt.NewNumericDate(now.Add(-1 * time.Minute)),
+		ExpiresAt: jwt.NewNumericDate(now.Add(9 * time.Minute)),
+		Issuer:    c.appID,
+	})
+
+	signed, err := token.SignedString(c.privateKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign github app jwt: %w", err)
+	}
+
+	return signed, nil
 }
 
-// GetPullRequest retrieves a pull request by number
-func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error) {
-	// TODO: Implement using go-github client
-	return nil, fmt.Errorf("not yet implemented")
+func parsePrivateKey(privateKeyPEM []byte) (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode(privateKeyPEM)
+	if block == nil {
+		return nil, fmt.Errorf("pem block not found")
+	}
+
+	if privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		return privateKey, nil
+	}
+
+	parsedKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	privateKey, ok := parsedKey.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("private key is not rsa")
+	}
+
+	return privateKey, nil
+}
+
+func ParseRepoRef(repoRef string) (string, string, error) {
+	trimmed := strings.TrimSpace(repoRef)
+	trimmed = strings.TrimPrefix(trimmed, "https://github.com/")
+	trimmed = strings.TrimPrefix(trimmed, "http://github.com/")
+	trimmed = strings.TrimPrefix(trimmed, "github.com/")
+	trimmed = strings.TrimPrefix(trimmed, "/")
+
+	parts := strings.Split(trimmed, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("invalid github repo ref %q", repoRef)
+	}
+
+	return parts[0], parts[1], nil
+}
+
+type installationTransport struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (t *installationTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.Header = clone.Header.Clone()
+	clone.Header.Set("Accept", "application/vnd.github+json")
+	clone.Header.Set("Authorization", "token "+t.token)
+	clone.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	return t.base.RoundTrip(clone)
+}
+
+func cloneURL(u *url.URL) *url.URL {
+	clone := *u
+	if !strings.HasSuffix(clone.Path, "/") {
+		clone.Path += "/"
+	}
+	return &clone
+}
+
+func transportForClient(client *http.Client) http.RoundTripper {
+	if client != nil && client.Transport != nil {
+		return client.Transport
+	}
+	return http.DefaultTransport
+}
+
+func mustParseURL(raw string) *url.URL {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		panic(err)
+	}
+	return parsed
 }

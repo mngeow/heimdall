@@ -10,18 +10,18 @@ Symphony MUST use a GitHub App for GitHub API and git push operations and MUST r
 - **THEN** it mints a short-lived installation token from its GitHub App configuration
 - **AND** it uses that token for the branch push instead of a long-lived personal access token
 
-### Requirement: GitHub webhooks are verified before processing
-Symphony MUST verify the GitHub webhook signature before parsing or acting on incoming webhook payloads and MUST support at minimum the `issue_comment` event for pull request command handling and the `pull_request` event for pull request lifecycle reconciliation.
+### Requirement: GitHub pull request activity is polled before processing
+Symphony MUST poll GitHub for new pull request comments and relevant pull request lifecycle changes by using its GitHub App installation credentials, and it MUST not require inbound GitHub webhook delivery for the standard v1 deployment path.
 
-#### Scenario: GitHub sends an issue comment webhook
-- **WHEN** Symphony receives a GitHub `issue_comment` webhook delivery
-- **THEN** it verifies the delivery against the configured webhook secret before command parsing occurs
-- **AND** it rejects the request if signature verification fails
+#### Scenario: GitHub poll sees a new command comment on a Symphony-managed pull request
+- **WHEN** Symphony runs a GitHub poll cycle for a managed repository and observes a new issue comment on a Symphony-managed pull request within the configured polling window
+- **THEN** it makes that comment available to the runtime components responsible for authorization and command parsing
+- **AND** the command-intake path does not depend on a public inbound webhook endpoint
 
-#### Scenario: GitHub sends a pull request webhook
-- **WHEN** Symphony receives a GitHub `pull_request` webhook delivery for a repository managed by Symphony
-- **THEN** it verifies the delivery against the configured webhook secret before reconciliation logic runs
-- **AND** it makes that pull request event available to the runtime components responsible for binding and lifecycle synchronization
+#### Scenario: GitHub poll sees a relevant pull request state change
+- **WHEN** Symphony polls a managed repository and detects a relevant lifecycle change on a Symphony-managed pull request
+- **THEN** it makes that pull request change available to the runtime components responsible for pull request reconciliation
+- **AND** the reconciliation path does not depend on inbound webhook delivery
 
 ### Requirement: GitHub repository operations support the automation lifecycle
 The GitHub SCM service MUST create or reuse branches, open or reuse pull requests, and publish pull request comments for Symphony workflows.

@@ -9,7 +9,7 @@ Symphony polls Linear for issues entering an active state, then:
 2. Generates an OpenSpec change from the issue title and description
 3. Commits and pushes the generated spec artifacts
 4. Opens a GitHub pull request to `main`
-5. Listens for GitHub PR comments to refine specs or run `/opsx-apply` with an allowed agent
+5. Polls GitHub for PR comments on Symphony-managed pull requests so it can refine specs or run `/opsx-apply` with an allowed agent
 6. Commits any resulting changes back to the same branch
 
 ## Quick Start
@@ -42,7 +42,7 @@ Create `/etc/symphony/config.yaml`:
 ```yaml
 server:
   listen_address: ":8080"
-  public_url: "https://symphony.example.com"
+  public_url: "http://127.0.0.1:8080"
 
 storage:
   driver: sqlite
@@ -56,8 +56,9 @@ linear:
     - "ENG"
 
 github:
-  webhook_path: "/webhooks/github"
   base_branch: "main"
+  poll_interval: 30s
+  lookback_window: 2m
 
 repos:
   - name: "github.com/acme/platform"
@@ -78,8 +79,8 @@ Set environment variables for secrets:
 ```bash
 export SYMPHONY_LINEAR_API_TOKEN="your-linear-token"
 export SYMPHONY_GITHUB_APP_ID="your-app-id"
-export SYMPHONY_GITHUB_PRIVATE_KEY="your-private-key"
-export SYMPHONY_GITHUB_WEBHOOK_SECRET="your-webhook-secret"
+export SYMPHONY_GITHUB_INSTALLATION_ID="your-installation-id"
+export SYMPHONY_GITHUB_PRIVATE_KEY_FILE="/etc/symphony/github-app.pem"
 ```
 
 ### Running
@@ -105,10 +106,9 @@ curl http://localhost:8080/readyz
 │   ├── board/linear/      # Linear integration
 │   ├── config/            # Configuration loading
 │   ├── exec/              # OpenSpec/OpenCode wrappers
-│   ├── httpserver/        # HTTP server and webhooks
 │   ├── repo/              # Git repository management
-│   ├── scm/github/        # GitHub integration
-│   ├── slashcmd/          # PR command parsing
+│   ├── scm/github/        # GitHub App auth and polling
+│   ├── slashcmd/          # PR command parsing and intake
 │   ├── store/             # SQLite persistence
 │   ├── validation/        # Dependency validation
 │   └── workflow/          # Workflow orchestration

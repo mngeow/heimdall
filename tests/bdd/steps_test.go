@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/mngeow/symphony/internal/config"
@@ -14,20 +15,29 @@ import (
 
 // testContext holds the state for each scenario
 type testContext struct {
-	config          *config.Config
-	store           *store.Store
-	queue           *store.JobQueue
-	workItem        *store.WorkItem
-	pr              *store.PullRequest
-	repoBinding     *store.RepoBinding
-	workflowRun     *store.WorkflowRun
-	command         string
-	commandResult   string
-	authorizer      *slashcmd.Authorizer
-	parser          *slashcmd.Parser
-	isAuthorized    bool
-	isRejected      bool
-	rejectionReason string
+	config           *config.Config
+	store            *store.Store
+	queue            *store.JobQueue
+	intake           *slashcmd.Intake
+	workItem         *store.WorkItem
+	pr               *store.PullRequest
+	repoBinding      *store.RepoBinding
+	workflowRun      *store.WorkflowRun
+	command          string
+	commandResult    string
+	pendingComment   string
+	pendingActor     string
+	pendingCommentID string
+	lastPollResult   *slashcmd.ProcessResult
+	authorizer       *slashcmd.Authorizer
+	parser           *slashcmd.Parser
+	isAuthorized     bool
+	isRejected       bool
+	pollObserved     bool
+	workflowQueued   bool
+	duplicateSeen    bool
+	publicWebhook    bool
+	rejectionReason  string
 }
 
 // ctxKey is used to store testContext in context
@@ -51,14 +61,28 @@ func TestFeatures(t *testing.T) {
 func InitializeScenario(sc *godog.ScenarioContext) {
 	// Create a new test context for each scenario
 	sc.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
+		runtimeStore, err := store.New(":memory:")
+		if err != nil {
+			return ctx, err
+		}
+		if err := runtimeStore.Migrate(ctx); err != nil {
+			return ctx, err
+		}
+		queue := store.NewJobQueue(runtimeStore)
 		tc := &testContext{
-			parser: slashcmd.NewParser(nil),
+			store:         runtimeStore,
+			queue:         queue,
+			intake:        slashcmd.NewIntake(runtimeStore, queue, nil),
+			parser:        slashcmd.NewParser(nil),
+			pendingActor:  "testuser",
+			publicWebhook: false,
 		}
 		return context.WithValue(ctx, ctxKey{}, tc), nil
 	})
 
 	// Background steps
 	sc.Step(`^Symphony is configured with a Linear team and GitHub repository$`, symphonyIsConfigured)
+	sc.Step(`^Symphony is configured with GitHub polling$`, symphonyIsConfigured)
 	sc.Step(`^the required local executables are available$`, executablesAreAvailable)
 	sc.Step(`^a Symphony-managed pull request exists$`, symphonyManagedPRExists)
 	sc.Step(`^the PR author is in the allowed users list$`, authorIsAllowed)
@@ -88,6 +112,8 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 
 	// Command handling steps
 	sc.Step(`^the user comments "([^"]*)"$`, userComments)
+	sc.Step(`^Symphony polls GitHub$`, symphonyPollsGitHub)
+	sc.Step(`^Symphony should discover the comment during polling$`, symphonyShouldDiscoverCommentDuringPolling)
 	sc.Step(`^Symphony should reply with the current proposal status$`, symphonyShouldReplyWithStatus)
 	sc.Step(`^Symphony should update the proposal artifacts$`, symphonyShouldUpdateArtifacts)
 	sc.Step(`^Symphony should commit the changes$`, symphonyShouldCommitChanges)
@@ -102,11 +128,11 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^the repository does not allow agent "([^"]*)"$`, repositoryDoesNotAllowAgent)
 	sc.Step(`^Symphony should comment that the agent is not authorized$`, symphonyShouldCommentAgentNotAuthorized)
 	sc.Step(`^a command has already been processed$`, commandAlreadyProcessed)
-	sc.Step(`^the same comment is delivered again$`, sameCommentDeliveredAgain)
+	sc.Step(`^the same comment is observed in another GitHub poll$`, sameCommentDeliveredAgain)
 	sc.Step(`^the duplicate should be detected$`, duplicateShouldBeDetected)
 	sc.Step(`^the command should not be executed again$`, commandNotExecutedAgain)
 	sc.Step(`^a command comment exists$`, commandCommentExists)
-	sc.Step(`^the comment is edited$`, commentIsEdited)
+	sc.Step(`^Symphony polls an edited version of the same comment$`, commentIsEdited)
 	sc.Step(`^the edit should not trigger a new command execution$`, editShouldNotTriggerExecution)
 
 	// Security steps
@@ -114,12 +140,8 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^a user comments "([^"]*)"$`, userComments)
 	sc.Step(`^the command should be rejected$`, commandShouldBeRejected)
 	sc.Step(`^Symphony should record that the PR is not eligible$`, symphonyShouldRecordNotEligible)
-	sc.Step(`^a GitHub webhook delivery$`, githubWebhookDelivery)
-	sc.Step(`^the signature is valid$`, signatureIsValid)
-	sc.Step(`^the webhook should be processed$`, webhookShouldBeProcessed)
-	sc.Step(`^the signature is invalid$`, signatureIsInvalid)
-	sc.Step(`^the webhook should be rejected$`, webhookShouldBeRejected)
-	sc.Step(`^a 401 response should be returned$`, unauthorizedResponseReturned)
+	sc.Step(`^Symphony runs without a public GitHub webhook endpoint$`, symphonyRunsWithoutPublicGitHubWebhookEndpoint)
+	sc.Step(`^the command-intake path should not require a public webhook endpoint$`, commandIntakePathShouldNotRequirePublicWebhookEndpoint)
 	sc.Step(`^Symphony uses a GitHub App$`, symphonyUsesGitHubApp)
 	sc.Step(`^installation tokens are minted$`, installationTokensMinted)
 	sc.Step(`^tokens should not appear in logs$`, tokensNotInLogs)
@@ -139,14 +161,19 @@ func symphonyIsConfigured(ctx context.Context) error {
 			TeamKeys:     []string{"ENG"},
 			ActiveStates: []string{"In Progress"},
 		},
+		GitHub: config.GitHubConfig{
+			PollInterval:   30 * time.Second,
+			LookbackWindow: 2 * time.Minute,
+		},
 		Repos: []config.RepoConfig{
 			{
-				Name:           "github.com/test/repo",
-				AllowedUsers:   []string{"testuser", "alice"},
-				AllowedAgents:  []string{"gpt-5.4", "claude"},
-				LinearTeamKeys: []string{"ENG"},
-				DefaultBranch:  "main",
-				BranchPrefix:   "symphony",
+				Name:            "github.com/test/repo",
+				LocalMirrorPath: "/tmp/test-repo.git",
+				AllowedUsers:    []string{"testuser", "alice"},
+				AllowedAgents:   []string{"gpt-5.4", "claude"},
+				LinearTeamKeys:  []string{"ENG"},
+				DefaultBranch:   "main",
+				BranchPrefix:    "symphony",
 			},
 		},
 	}
@@ -161,20 +188,45 @@ func executablesAreAvailable(ctx context.Context) error {
 
 func symphonyManagedPRExists(ctx context.Context) error {
 	tc := getTC(ctx)
-	tc.pr = &store.PullRequest{
-		ID:         1,
-		Number:     42,
-		Title:      "[ENG-123] OpenSpec proposal for Add rate limiting",
-		Provider:   "github",
-		HeadBranch: "symphony/ENG-123-add-rate-limiting",
-		BaseBranch: "main",
-		State:      "open",
+	if tc.config == nil {
+		if err := symphonyIsConfigured(ctx); err != nil {
+			return err
+		}
 	}
+
+	repo := &store.Repository{
+		Provider:        "github",
+		RepoRef:         tc.config.Repos[0].Name,
+		Owner:           "test",
+		Name:            "repo",
+		DefaultBranch:   "main",
+		BranchPrefix:    "symphony",
+		LocalMirrorPath: tc.config.Repos[0].LocalMirrorPath,
+		IsActive:        true,
+	}
+	if err := tc.store.SaveRepository(ctx, repo); err != nil {
+		return err
+	}
+
 	tc.repoBinding = &store.RepoBinding{
 		ID:            1,
 		BranchName:    "symphony/ENG-123-add-rate-limiting",
 		ChangeName:    "ENG-123-add-rate-limiting",
 		BindingStatus: "active",
+	}
+	tc.pr = &store.PullRequest{
+		RepositoryID:  repo.ID,
+		RepoBindingID: &tc.repoBinding.ID,
+		Number:        42,
+		Title:         "[ENG-123] OpenSpec proposal for Add rate limiting",
+		Provider:      "github",
+		HeadBranch:    "symphony/ENG-123-add-rate-limiting",
+		BaseBranch:    "main",
+		State:         "open",
+		URL:           "https://github.com/test/repo/pull/42",
+	}
+	if err := tc.store.SavePullRequest(ctx, tc.pr); err != nil {
+		return err
 	}
 	return nil
 }
@@ -354,44 +406,66 @@ func symphonyShouldCommentWithInfo(ctx context.Context) error {
 func userComments(ctx context.Context, comment string) error {
 	tc := getTC(ctx)
 	tc.command = comment
-
-	// Check if this is a Symphony-managed PR
-	// If repoBinding is nil, this is not a Symphony PR and commands should be rejected
-	if tc.repoBinding == nil {
-		tc.isAuthorized = false
-		tc.isRejected = true
-		tc.rejectionReason = "PR is not Symphony-managed"
-		return nil
-	}
-
-	// Ensure authorizer is initialized
-	if tc.authorizer == nil {
-		// Initialize with default config if not already set
-		if tc.config == nil {
-			symphonyIsConfigured(ctx)
-		}
-		tc.authorizer = slashcmd.NewAuthorizer(tc.config.Repos[0], nil)
-	}
-
-	// Parse the command
-	cmd := tc.parser.Parse(comment)
-	if cmd == nil {
-		return fmt.Errorf("failed to parse command: %s", comment)
-	}
-
-	// Check authorization
-	result := tc.authorizer.Authorize("testuser", cmd)
-	tc.isAuthorized = result.Authorized
-	if !result.Authorized {
-		tc.isRejected = true
-		tc.rejectionReason = result.Reason
-	}
+	tc.pendingComment = comment
+	tc.pendingCommentID = "comment-1"
+	tc.pendingActor = "testuser"
+	tc.pollObserved = false
+	tc.workflowQueued = false
+	tc.duplicateSeen = false
+	tc.lastPollResult = nil
 
 	return nil
 }
 
 func theyComment(ctx context.Context, comment string) error {
 	return userComments(ctx, comment)
+}
+
+func symphonyPollsGitHub(ctx context.Context) error {
+	tc := getTC(ctx)
+	tc.pollObserved = true
+	tc.isAuthorized = false
+	tc.isRejected = false
+	tc.rejectionReason = ""
+	tc.workflowQueued = false
+	tc.duplicateSeen = false
+
+	if tc.pendingComment == "" {
+		return nil
+	}
+	if tc.config == nil {
+		if err := symphonyIsConfigured(ctx); err != nil {
+			return err
+		}
+	}
+	if tc.repoBinding == nil || tc.pr == nil {
+		tc.isRejected = true
+		tc.rejectionReason = "PR is not Symphony-managed"
+		return nil
+	}
+
+	result, err := tc.intake.Process(ctx, tc.config.Repos[0], tc.pr, tc.pendingCommentID, tc.pendingActor, tc.pendingComment)
+	if err != nil {
+		return err
+	}
+
+	tc.lastPollResult = result
+	tc.duplicateSeen = result.Duplicate
+	tc.workflowQueued = result.Job != nil
+	tc.isAuthorized = result.Status == "queued"
+	tc.isRejected = result.Status == "rejected"
+	return nil
+}
+
+func symphonyShouldDiscoverCommentDuringPolling(ctx context.Context) error {
+	tc := getTC(ctx)
+	if !tc.pollObserved {
+		return fmt.Errorf("expected GitHub polling to run")
+	}
+	if tc.lastPollResult == nil && !tc.isRejected {
+		return fmt.Errorf("expected polling to discover a command observation")
+	}
+	return nil
 }
 
 func symphonyShouldReplyWithStatus(ctx context.Context) error {
@@ -459,16 +533,13 @@ func userNotInAllowedList(ctx context.Context) error {
 	if tc.config == nil {
 		symphonyIsConfigured(ctx)
 	}
-	// Create authorizer without testuser
-	repoConfig := tc.config.Repos[0]
-	repoConfig.AllowedUsers = []string{"otheruser"}
-	tc.authorizer = slashcmd.NewAuthorizer(repoConfig, nil)
+	tc.config.Repos[0].AllowedUsers = []string{"otheruser"}
 	return nil
 }
 
 func noWorkflowTriggered(ctx context.Context) error {
 	tc := getTC(ctx)
-	if tc.isAuthorized {
+	if tc.workflowQueued {
 		return fmt.Errorf("expected no workflow to be triggered")
 	}
 	return nil
@@ -483,33 +554,60 @@ func symphonyShouldCommentAgentNotAuthorized(ctx context.Context) error {
 }
 
 func commandAlreadyProcessed(ctx context.Context) error {
-	// Mark command as already processed
-	return nil
+	if err := symphonyManagedPRExists(ctx); err != nil {
+		return err
+	}
+	tc := getTC(ctx)
+	tc.pendingComment = "/opsx-apply --agent gpt-5.4"
+	tc.pendingCommentID = "comment-1"
+	tc.pendingActor = "testuser"
+	return symphonyPollsGitHub(ctx)
 }
 
 func sameCommentDeliveredAgain(ctx context.Context) error {
-	return nil
+	tc := getTC(ctx)
+	tc.pendingComment = "/opsx-apply --agent gpt-5.4"
+	tc.pendingCommentID = "comment-1"
+	tc.pendingActor = "testuser"
+	return symphonyPollsGitHub(ctx)
 }
 
 func duplicateShouldBeDetected(ctx context.Context) error {
-	// Verify duplicate detection
+	tc := getTC(ctx)
+	if !tc.duplicateSeen {
+		return fmt.Errorf("expected duplicate command observation to be detected")
+	}
 	return nil
 }
 
 func commandNotExecutedAgain(ctx context.Context) error {
-	// Verify command not executed again
+	tc := getTC(ctx)
+	if tc.workflowQueued {
+		return fmt.Errorf("expected duplicate observation to avoid queuing a new workflow")
+	}
 	return nil
 }
 
 func commandCommentExists(ctx context.Context) error {
-	return nil
+	return commandAlreadyProcessed(ctx)
 }
 
 func commentIsEdited(ctx context.Context) error {
-	return nil
+	tc := getTC(ctx)
+	tc.pendingComment = "/symphony refine Updated after edit"
+	tc.pendingCommentID = "comment-1"
+	tc.pendingActor = "testuser"
+	return symphonyPollsGitHub(ctx)
 }
 
 func editShouldNotTriggerExecution(ctx context.Context) error {
+	tc := getTC(ctx)
+	if !tc.duplicateSeen {
+		return fmt.Errorf("expected edited comment to be treated as duplicate")
+	}
+	if tc.workflowQueued {
+		return fmt.Errorf("expected edited comment not to queue a new workflow")
+	}
 	return nil
 }
 
@@ -534,30 +632,27 @@ func commandShouldBeRejected(ctx context.Context) error {
 }
 
 func symphonyShouldRecordNotEligible(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.rejectionReason == "" {
+		return fmt.Errorf("expected a rejection reason for non-eligible PR")
+	}
 	return nil
 }
 
-func githubWebhookDelivery(ctx context.Context) error {
+func symphonyRunsWithoutPublicGitHubWebhookEndpoint(ctx context.Context) error {
+	tc := getTC(ctx)
+	tc.publicWebhook = false
 	return nil
 }
 
-func signatureIsValid(ctx context.Context) error {
-	return nil
-}
-
-func webhookShouldBeProcessed(ctx context.Context) error {
-	return nil
-}
-
-func signatureIsInvalid(ctx context.Context) error {
-	return nil
-}
-
-func webhookShouldBeRejected(ctx context.Context) error {
-	return nil
-}
-
-func unauthorizedResponseReturned(ctx context.Context) error {
+func commandIntakePathShouldNotRequirePublicWebhookEndpoint(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.publicWebhook {
+		return fmt.Errorf("expected polling path not to require a public webhook endpoint")
+	}
+	if !tc.pollObserved {
+		return fmt.Errorf("expected polling path to observe the command without a webhook")
+	}
 	return nil
 }
 

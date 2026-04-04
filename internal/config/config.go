@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -39,11 +40,12 @@ type LinearConfig struct {
 
 // GitHubConfig represents GitHub integration configuration
 type GitHubConfig struct {
-	WebhookPath   string `yaml:"webhook_path"`
-	BaseBranch    string `yaml:"base_branch"`
-	AppID         string // loaded from env
-	PrivateKey    string // loaded from env
-	WebhookSecret string // loaded from env
+	BaseBranch     string        `yaml:"base_branch"`
+	PollInterval   time.Duration `yaml:"poll_interval"`
+	LookbackWindow time.Duration `yaml:"lookback_window"`
+	AppID          string        // loaded from env
+	InstallationID int64         // loaded from env
+	PrivateKey     string        // loaded from env or file
 }
 
 // RepoConfig represents a managed repository
@@ -87,15 +89,35 @@ func Load() (*Config, error) {
 	if cfg.GitHub.BaseBranch == "" {
 		cfg.GitHub.BaseBranch = "main"
 	}
-	if cfg.GitHub.WebhookPath == "" {
-		cfg.GitHub.WebhookPath = "/webhooks/github"
+	if cfg.GitHub.PollInterval == 0 {
+		cfg.GitHub.PollInterval = 30 * time.Second
+	}
+	if cfg.GitHub.LookbackWindow == 0 {
+		cfg.GitHub.LookbackWindow = 2 * time.Minute
 	}
 
 	// Load secrets from environment
 	cfg.Linear.APIToken = os.Getenv("SYMPHONY_LINEAR_API_TOKEN")
 	cfg.GitHub.AppID = os.Getenv("SYMPHONY_GITHUB_APP_ID")
-	cfg.GitHub.PrivateKey = os.Getenv("SYMPHONY_GITHUB_PRIVATE_KEY")
-	cfg.GitHub.WebhookSecret = os.Getenv("SYMPHONY_GITHUB_WEBHOOK_SECRET")
+	installationID := os.Getenv("SYMPHONY_GITHUB_INSTALLATION_ID")
+	if installationID != "" {
+		parsedInstallationID, err := strconv.ParseInt(installationID, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse SYMPHONY_GITHUB_INSTALLATION_ID: %w", err)
+		}
+		cfg.GitHub.InstallationID = parsedInstallationID
+	}
+
+	privateKeyFile := os.Getenv("SYMPHONY_GITHUB_PRIVATE_KEY_FILE")
+	if privateKeyFile != "" {
+		privateKey, err := os.ReadFile(privateKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read SYMPHONY_GITHUB_PRIVATE_KEY_FILE: %w", err)
+		}
+		cfg.GitHub.PrivateKey = string(privateKey)
+	} else {
+		cfg.GitHub.PrivateKey = os.Getenv("SYMPHONY_GITHUB_PRIVATE_KEY")
+	}
 
 	return &cfg, nil
 }

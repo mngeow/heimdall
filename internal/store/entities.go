@@ -140,8 +140,17 @@ func (s *Store) SaveRepository(ctx context.Context, repo *Repository) error {
 	}
 
 	if repo.ID == 0 {
-		id, _ := result.LastInsertId()
-		repo.ID = id
+		if id, _ := result.LastInsertId(); id > 0 {
+			repo.ID = id
+		} else {
+			existing, err := s.GetRepositoryByRef(ctx, repo.RepoRef)
+			if err != nil {
+				return err
+			}
+			if existing != nil {
+				repo.ID = existing.ID
+			}
+		}
 	}
 	return nil
 }

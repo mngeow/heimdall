@@ -1,6 +1,4 @@
-# Feature: Pull Request Command Workflows
-
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Symphony accepts a narrow set of slash commands on automation pull requests
 Symphony MUST detect only the documented slash command surface by polling GitHub comments on pull requests that it created and MUST ignore unsupported mutation commands.
@@ -15,22 +13,6 @@ Symphony MUST detect only the documented slash command surface by polling GitHub
 - **THEN** Symphony does not run repository mutation logic for that comment
 - **AND** Symphony records that the command was ignored or rejected
 
-### Requirement: Refinement updates OpenSpec artifacts without applying implementation tasks
-Symphony MUST treat `/symphony refine` as an artifact-only operation that updates the relevant OpenSpec files and does not run implementation apply steps.
-
-#### Scenario: User refines an open proposal
-- **WHEN** an authorized user comments `/symphony refine Clarify rollback behavior and add non-goals.` on an active Symphony pull request
-- **THEN** Symphony updates the relevant OpenSpec proposal artifacts for that change
-- **AND** Symphony does not run implementation task execution as part of the refine command
-
-### Requirement: Apply uses an allowed agent and commits results to the same branch
-Symphony MUST run `/opsx-apply` only with an agent allowed for the target repository and MUST commit the resulting task and code changes back to the same proposal branch.
-
-#### Scenario: Authorized apply command selects an allowed agent
-- **WHEN** an authorized user comments `/opsx-apply --agent gpt-5.4` on a Symphony pull request whose repository allows `gpt-5.4`
-- **THEN** Symphony runs the apply workflow with that selected agent
-- **AND** Symphony commits and pushes the resulting task updates and implementation changes to the same branch
-
 ### Requirement: Duplicate or edited comments are safe
 Symphony MUST deduplicate command execution by comment identity, MUST ignore comment edits in v1, and MUST remain safe when overlapping GitHub poll windows observe the same comment more than once.
 
@@ -42,4 +24,4 @@ Symphony MUST deduplicate command execution by comment identity, MUST ignore com
 #### Scenario: Existing command comment is edited after initial detection
 - **WHEN** a user edits a previously created command comment on a Symphony pull request after Symphony already observed the original comment
 - **THEN** Symphony does not treat the edit as a new command request
-- **AND** no new mutation workflow is started from the edit event
+- **AND** no new mutation workflow is started from the edited comment

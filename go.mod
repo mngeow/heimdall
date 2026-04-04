@@ -6,6 +6,7 @@ require gopkg.in/yaml.v3 v3.0.1
 
 require (
 	github.com/cucumber/godog v0.15.1
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/mattn/go-sqlite3 v1.14.40
 )
 

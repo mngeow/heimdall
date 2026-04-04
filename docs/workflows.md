@@ -62,16 +62,15 @@ Recommended command:
 
 Processing steps:
 
-1. GitHub sends an `issue_comment` webhook.
-2. Symphony verifies the webhook signature.
-3. Symphony checks that the comment is on a PR, not a plain issue.
-4. Symphony checks that the commenter is allowed to issue commands.
-5. Symphony deduplicates the event by comment delivery id or comment node id.
-6. Symphony resolves the branch and associated OpenSpec change.
-7. Symphony runs the refinement executor against the worktree.
-8. Symphony commits any changed artifacts.
-9. Symphony pushes the branch.
-10. Symphony comments with a short summary of what changed.
+1. A GitHub poll cycle observes a new issue comment on a Symphony-managed pull request.
+2. Symphony checks that the comment is on a PR, not a plain issue.
+3. Symphony checks that the commenter is allowed to issue commands.
+4. Symphony deduplicates the command by comment node id or another stable comment identity.
+5. Symphony resolves the branch and associated OpenSpec change.
+6. Symphony runs the refinement executor against the worktree.
+7. Symphony commits any changed artifacts.
+8. Symphony pushes the branch.
+9. Symphony comments with a short summary of what changed.
 
 Refinement should be scoped to:
 
@@ -101,8 +100,8 @@ Examples:
 
 Processing steps:
 
-1. Verify webhook signature and actor authorization.
-2. Parse the requested agent.
+1. A GitHub poll cycle observes the command comment on a Symphony-managed pull request.
+2. Authorize the actor and parse the requested agent.
 3. Check that the agent is allowed for the repository.
 4. Resolve the branch and worktree for the PR.
 5. Ask OpenSpec for apply instructions.
@@ -146,7 +145,7 @@ Notes:
 
 ## Idempotency Rules
 
-Idempotency is critical because polling and webhook redelivery both happen in real systems.
+Idempotency is critical because overlapping polling windows and retries both happen in real systems.
 
 Symphony should dedupe at these boundaries:
 

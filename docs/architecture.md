@@ -2,21 +2,23 @@
 
 ## Runtime Overview
 
-Symphony should be a single Go binary with two long-running responsibilities:
+Symphony should be a single Go binary with three long-running responsibilities:
 
 - a background poller that watches Linear for state transitions
-- an HTTP server that receives GitHub webhooks for PR comments and related events
+- a background poller that watches GitHub for new PR comments and relevant PR state changes
+- an HTTP server for health, readiness, and any private operator endpoints
 
-Those responsibilities feed a shared workflow engine backed by a persistent store.
+The two pollers feed a shared workflow engine backed by a persistent store, while the HTTP server exposes health, readiness, and private operator endpoints.
 
 ```mermaid
 flowchart TB
     Linear["Linear<br/>GraphQL / API key"] -->|poll| Poller
-    GitHub["GitHub<br/>App + webhooks"] -->|webhooks| WebhookServer
+    GitHub["GitHub<br/>App + APIs"] -->|poll| GitHubPoller
 
     subgraph Symphony["Symphony"]
-        Poller["Poller"]
-        WebhookServer["Webhook Server"]
+        Poller["Linear Poller"]
+        GitHubPoller["GitHub Poller"]
+        HTTPServer["HTTP Server<br/>health + readiness"]
         CommandDispatcher["Command Dispatcher"]
         WorkflowEngine["Workflow Engine"]
         RepoManager["Repo Manager<br/>git/worktree"]
@@ -25,7 +27,7 @@ flowchart TB
         SQLite["SQLite<br/>state, cursors, jobs, dedupe,<br/>issue snapshots, PR mappings, audit"]
 
         Poller --> WorkflowEngine
-        WebhookServer --> CommandDispatcher --> WorkflowEngine
+        GitHubPoller --> CommandDispatcher --> WorkflowEngine
         WorkflowEngine --> RepoManager
         WorkflowEngine --> Executors
         WorkflowEngine --> SQLite
@@ -66,7 +68,8 @@ GitHub responsibilities should be split internally even though they target the s
 
 - GitHub App auth and installation token minting
 - repo operations such as branch, commit, push, and PR creation
-- webhook verification and payload normalization
+- polling for issue comments and pull request state changes
+- normalization of polled GitHub activity into command and reconciliation inputs
 - PR comment publishing and status feedback
 
 Keeping these concerns separate makes testing easier and reduces the blast radius of auth bugs.
@@ -116,6 +119,7 @@ Use SQLite in V1 because the target deployment is a single Linux host and operat
 The database should store at least:
 
 - provider cursors for Linear polling
+- provider cursors or checkpoints for GitHub polling
 - last seen issue state snapshots
 - workflow runs and phase status
 - repo and PR bindings
@@ -131,9 +135,9 @@ Concurrency should be limited and explicit.
 - one active workflow lock per issue
 - one repo-scoped mutation lock for branch-changing operations
 - asynchronous job workers for long-running tasks
-- fast webhook handlers that enqueue work instead of doing repo mutation inline
+- fast polling cycles that enqueue work instead of doing repo mutation inline
 
-This prevents duplicate branches, conflicting pushes, and long webhook timeouts.
+This prevents duplicate branches, conflicting pushes, and long poll cycles from turning into unsafe concurrent mutations.
 
 ## Go Package Layout
 

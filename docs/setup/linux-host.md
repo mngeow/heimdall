@@ -14,7 +14,6 @@ Symphony should run as a single compiled Go binary, but the host still needs the
 - CA certificate bundle for outbound HTTPS
 - `systemd` and `journald` for service supervision and log collection
 - writable persistent storage for config, SQLite, repo mirrors, worktrees, and logs
-- a public HTTPS endpoint reachable by GitHub webhooks
 
 ## Optional But Recommended Operator Tools
 
@@ -31,7 +30,8 @@ These should not be required on the production host if Symphony is shipped as a 
 
 - a Go toolchain
 - a separate database server
-- a Linear webhook receiver
+- a public reverse proxy for GitHub command intake
+- a public reverse proxy for Linear intake
 - a browser-based admin UI
 
 ## Recommended Host Filesystem Layout
@@ -70,9 +70,10 @@ Outbound access:
 
 Inbound access:
 
-- GitHub webhook deliveries over HTTPS
+- no public inbound GitHub or Linear webhook access for the standard v1 workflow path
+- optional private access to health and readiness endpoints if the operator wants remote checks
 
-Linear does not need inbound webhook access in v1 because Symphony polls it.
+Both provider integrations are polling-based in v1, so outbound HTTPS is the critical networking requirement.
 
 ## Dependency Installation Notes
 
@@ -96,7 +97,6 @@ opencode --version
 2. Install `git`, `openspec`, `opencode`, and CA certificates.
 3. Create `/etc/symphony/`, `/var/lib/symphony/`, and `/var/log/symphony/`.
 4. Place the config file and secrets.
-5. Confirm public HTTPS ingress exists for GitHub webhooks.
-6. Confirm outbound HTTPS works to GitHub and Linear.
-7. Confirm the system clock is synchronized.
-8. Start Symphony with `systemd`.
+5. Confirm outbound HTTPS works to GitHub and Linear.
+6. Confirm the system clock is synchronized.
+7. Start Symphony with `systemd`.

@@ -11,21 +11,19 @@ Feature: Security and authorization
     Scenario: Command on non-Symphony PR
       Given a pull request not created by Symphony
       When a user comments "/symphony status"
+      And Symphony polls GitHub
       Then the command should be rejected
       And Symphony should record that the PR is not eligible
 
-  Rule: Webhook signatures are verified
+  Rule: Polling does not require a public webhook endpoint
 
-    Scenario: Valid webhook signature
-      Given a GitHub webhook delivery
-      When the signature is valid
-      Then the webhook should be processed
-
-    Scenario: Invalid webhook signature
-      Given a GitHub webhook delivery
-      When the signature is invalid
-      Then the webhook should be rejected
-      And a 401 response should be returned
+    Scenario: Managed PR command is discovered without webhook delivery
+      Given Symphony runs without a public GitHub webhook endpoint
+      And a Symphony-managed pull request exists
+      When a user comments "/symphony status"
+      And Symphony polls GitHub
+      Then Symphony should discover the comment during polling
+      And the command-intake path should not require a public webhook endpoint
 
   Rule: Secrets are not exposed
 

@@ -28,7 +28,7 @@ Examples of provider-specific details that should stay out of the core:
 - Linear state IDs
 - Jira transition IDs
 - GitHub installation payload shapes
-- provider-specific webhook headers
+- provider-specific event payloads, polling cursors, or webhook headers
 
 ## Recommended Adapter Seams
 
@@ -53,7 +53,7 @@ Responsibilities:
 - push commits
 - create or update pull requests
 - read and publish PR comments
-- verify incoming webhooks
+- discover relevant PR activity through provider APIs or event delivery
 
 First implementation:
 
