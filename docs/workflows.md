@@ -62,11 +62,11 @@ Recommended command:
 
 Processing steps:
 
-1. GitHub sends an `issue_comment` webhook.
-2. Symphony verifies the webhook signature.
+1. Symphony polls GitHub for new comments on Symphony-managed pull requests.
+2. Symphony identifies a new `/symphony refine` comment since the last saved checkpoint.
 3. Symphony checks that the comment is on a PR, not a plain issue.
 4. Symphony checks that the commenter is allowed to issue commands.
-5. Symphony deduplicates the event by comment delivery id or comment node id.
+5. Symphony deduplicates the request by comment node id.
 6. Symphony resolves the branch and associated OpenSpec change.
 7. Symphony runs the refinement executor against the worktree.
 8. Symphony commits any changed artifacts.
@@ -101,16 +101,16 @@ Examples:
 
 Processing steps:
 
-1. Verify webhook signature and actor authorization.
-2. Parse the requested agent.
-3. Check that the agent is allowed for the repository.
-4. Resolve the branch and worktree for the PR.
-5. Ask OpenSpec for apply instructions.
-6. If the change is blocked, comment back with the reason instead of guessing.
-7. Run the apply executor with the selected agent.
-8. Commit task-file updates and code changes together.
-9. Push the branch.
-10. Comment back with completed tasks, remaining tasks, or blockers.
+1. During a GitHub poll cycle, Symphony discovers a new `/opsx-apply` comment on a Symphony-managed pull request.
+2. Symphony authorizes the actor and parses the requested agent.
+3. Symphony checks that the agent is allowed for the repository.
+4. Symphony resolves the branch and worktree for the PR.
+5. Symphony asks OpenSpec for apply instructions.
+6. If the change is blocked, Symphony comments back with the reason instead of guessing.
+7. Symphony runs the apply executor with the selected agent.
+8. Symphony commits task-file updates and code changes together.
+9. Symphony pushes the branch.
+10. Symphony comments back with completed tasks, remaining tasks, or blockers.
 
 ## Workflow 4: Archive From A PR Comment
 
@@ -146,7 +146,7 @@ Notes:
 
 ## Idempotency Rules
 
-Idempotency is critical because polling and webhook redelivery both happen in real systems.
+Idempotency is critical because polling and repeated API observations both happen in real systems.
 
 Symphony should dedupe at these boundaries:
 

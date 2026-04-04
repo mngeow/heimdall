@@ -14,18 +14,18 @@ Feature: Security and authorization
       Then the command should be rejected
       And Symphony should record that the PR is not eligible
 
-  Rule: Webhook signatures are verified
+  Rule: GitHub polling works without public ingress
 
-    Scenario: Valid webhook signature
-      Given a GitHub webhook delivery
-      When the signature is valid
-      Then the webhook should be processed
+    Scenario: New PR comments are discovered by polling
+      Given a Symphony-managed pull request exists
+      When Symphony polls GitHub for new pull request comments
+      Then new command comments should be discovered for processing
+      And Symphony should not require a public HTTPS endpoint
 
-    Scenario: Invalid webhook signature
-      Given a GitHub webhook delivery
-      When the signature is invalid
-      Then the webhook should be rejected
-      And a 401 response should be returned
+    Scenario: Pull request state changes are discovered by polling
+      Given a Symphony-managed pull request exists
+      When Symphony polls GitHub for pull request state changes
+      Then state changes should be available for reconciliation
 
   Rule: Secrets are not exposed
 

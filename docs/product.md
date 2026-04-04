@@ -35,7 +35,7 @@ To keep V1 easy to operate and easy to adopt, the design makes these choices:
 - one service binary, not multiple deployable services
 - one local config file plus environment-backed secrets
 - SQLite by default, so a single Linux VM is enough to run the system
-- polling for Linear to avoid requiring public ingress from Linear
+- polling for both Linear and GitHub so v1 does not require public inbound access
 - slash commands in GitHub so the refinement loop stays in the PR
 - deterministic branch names and change names so retries reconcile instead of duplicating work
 - one open automation PR per issue per repository
@@ -54,7 +54,7 @@ To keep V1 easy to operate and easy to adopt, the design makes these choices:
 - a custom browser UI for workflow control
 - automatic merge or automatic deployment after PR creation
 - deep project-management features inside Symphony
-- real-time Linear webhooks in the first release
+- real-time provider webhooks in the first release
 - arbitrary shell access from GitHub comments
 
 ## Default V1 Conventions

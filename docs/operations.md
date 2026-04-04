@@ -9,8 +9,8 @@ Recommended shape:
 - systemd-managed binary
 - local SQLite database file
 - local repo mirrors and worktrees
-- inbound HTTPS for GitHub webhooks
 - outbound HTTPS to GitHub and Linear APIs
+- optional local HTTP for health and readiness endpoints
 
 ## Host Prerequisites
 
@@ -48,7 +48,6 @@ Example:
 ```yaml
 server:
   listen_address: ":8080"
-  public_url: "https://symphony.example.com"
 
 storage:
   driver: sqlite
@@ -62,7 +61,7 @@ linear:
     - "ENG"
 
 github:
-  webhook_path: "/webhooks/github"
+  poll_interval: 30s
   base_branch: "main"
 
 repos:
@@ -132,7 +131,7 @@ The bare mirrors are rebuildable from GitHub. The SQLite database is the critica
 
 ## Operational Risks To Call Out Early
 
-- GitHub webhooks still require public ingress even though Linear is polled
+- GitHub comment and PR-state handling is delayed by the configured poll interval
 - a broken local OpenCode installation blocks propose, refine, and apply workflows
 - stale repo mirrors can create confusing branch failures if fetch and prune are not enforced
 - if the machine clock is wrong, polling windows and audit timestamps become unreliable

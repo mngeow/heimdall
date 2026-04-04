@@ -244,8 +244,8 @@ Stores append-only audit records that answer who requested a change, which agent
 ## What Does Not Belong In SQLite
 
 - GitHub App private keys
-- webhook secrets
 - Linear API keys
+- any future webhook secrets or relay secrets if inbound delivery is added later
 - static repo routing rules
 - allowed GitHub users and agents
 

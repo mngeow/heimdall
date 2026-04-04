@@ -8,7 +8,7 @@ In the initial design, Symphony:
 - generates an OpenSpec change from the issue title and description
 - commits and pushes the generated spec artifacts
 - opens a GitHub pull request to `main`
-- listens for GitHub PR comments to refine specs or run `/opsx-apply` with an allowed agent
+- polls GitHub for new PR comments so it can refine specs or run `/opsx-apply` with an allowed agent
 - commits any resulting changes back to the same branch
 
 ## Confirmed V1 Decisions
@@ -23,7 +23,7 @@ In the initial design, Symphony:
 
 ## Important Note
 
-Linear is polled in V1, but GitHub comment handling still requires an inbound GitHub webhook endpoint so Symphony can react to PR comments.
+Both Linear and GitHub are polled in V1, so Symphony can run without a public inbound endpoint. The tradeoff is that issue and PR command handling is delayed by the configured poll interval.
 
 ## Document Map
 
@@ -35,7 +35,7 @@ Linear is polled in V1, but GitHub comment handling still requires an inbound Gi
 - `logging.md`: logging strategy, log fields, retention, and how to view Symphony logs
 - `extensibility.md`: how V1 stays ready for Jira, other SCMs, and remote execution later
 - `setup/README.md`: operator setup order for Linux host, GitHub, and Linear
-- `setup/github.md`: exact GitHub App, webhook, and repository setup
+- `setup/github.md`: exact GitHub App, polling, and repository setup
 - `setup/linear.md`: exact Linear account, API key, and state-mapping setup
 - `setup/linux-host.md`: Linux host dependencies and server preparation checklist
 - `database/README.md`: database design overview

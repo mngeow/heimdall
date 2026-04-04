@@ -114,12 +114,11 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^a user comments "([^"]*)"$`, userComments)
 	sc.Step(`^the command should be rejected$`, commandShouldBeRejected)
 	sc.Step(`^Symphony should record that the PR is not eligible$`, symphonyShouldRecordNotEligible)
-	sc.Step(`^a GitHub webhook delivery$`, githubWebhookDelivery)
-	sc.Step(`^the signature is valid$`, signatureIsValid)
-	sc.Step(`^the webhook should be processed$`, webhookShouldBeProcessed)
-	sc.Step(`^the signature is invalid$`, signatureIsInvalid)
-	sc.Step(`^the webhook should be rejected$`, webhookShouldBeRejected)
-	sc.Step(`^a 401 response should be returned$`, unauthorizedResponseReturned)
+	sc.Step(`^Symphony polls GitHub for new pull request comments$`, symphonyPollsGitHubForComments)
+	sc.Step(`^new command comments should be discovered for processing$`, newCommandCommentsShouldBeDiscovered)
+	sc.Step(`^Symphony should not require a public HTTPS endpoint$`, symphonyShouldNotRequirePublicHTTPEndpoint)
+	sc.Step(`^Symphony polls GitHub for pull request state changes$`, symphonyPollsGitHubForPRState)
+	sc.Step(`^state changes should be available for reconciliation$`, stateChangesShouldBeAvailableForReconciliation)
 	sc.Step(`^Symphony uses a GitHub App$`, symphonyUsesGitHubApp)
 	sc.Step(`^installation tokens are minted$`, installationTokensMinted)
 	sc.Step(`^tokens should not appear in logs$`, tokensNotInLogs)
@@ -537,27 +536,23 @@ func symphonyShouldRecordNotEligible(ctx context.Context) error {
 	return nil
 }
 
-func githubWebhookDelivery(ctx context.Context) error {
+func symphonyPollsGitHubForComments(ctx context.Context) error {
 	return nil
 }
 
-func signatureIsValid(ctx context.Context) error {
+func newCommandCommentsShouldBeDiscovered(ctx context.Context) error {
 	return nil
 }
 
-func webhookShouldBeProcessed(ctx context.Context) error {
+func symphonyShouldNotRequirePublicHTTPEndpoint(ctx context.Context) error {
 	return nil
 }
 
-func signatureIsInvalid(ctx context.Context) error {
+func symphonyPollsGitHubForPRState(ctx context.Context) error {
 	return nil
 }
 
-func webhookShouldBeRejected(ctx context.Context) error {
-	return nil
-}
-
-func unauthorizedResponseReturned(ctx context.Context) error {
+func stateChangesShouldBeAvailableForReconciliation(ctx context.Context) error {
 	return nil
 }
 

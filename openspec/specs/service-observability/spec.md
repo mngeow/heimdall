@@ -32,9 +32,9 @@ Symphony MUST record audit events that identify who requested a mutation, which 
 - **AND** the audit trail remains available independently of transient log retention settings
 
 ### Requirement: Sensitive data is excluded from logs and audit output
-Symphony MUST redact or exclude secrets and raw sensitive webhook material from logs and audit records.
+Symphony MUST redact or exclude secrets and raw sensitive GitHub or Linear API payload material from logs and audit records.
 
-#### Scenario: Authentication or webhook verification fails
-- **WHEN** Symphony records a failure involving GitHub or Linear authentication material
-- **THEN** the resulting logs and audit records exclude raw secrets and unredacted webhook bodies
+#### Scenario: Authentication or GitHub polling fails
+- **WHEN** Symphony records a failure involving GitHub or Linear authentication material or a GitHub polling failure
+- **THEN** the resulting logs and audit records exclude raw secrets and unredacted API payload bodies
 - **AND** they retain only the operational details required for troubleshooting

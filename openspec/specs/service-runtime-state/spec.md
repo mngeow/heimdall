@@ -12,7 +12,7 @@ Symphony MUST persist workflow state, provider cursors, work item snapshots, rep
 
 #### Scenario: Symphony starts with an empty or outdated database
 - **WHEN** Symphony opens its SQLite database and the required schema is missing or behind the expected version
-- **THEN** it initializes or migrates the schema before starting poller, worker, or webhook-driven workflow processing
+- **THEN** it initializes or migrates the schema before starting pollers, workers, or command-processing workflows
 - **AND** the resulting database layout matches the runtime state model expected by the service
 
 ### Requirement: Runtime state enforces one active binding per work item and repository
@@ -40,7 +40,7 @@ Symphony MUST persist queued jobs, workflow steps, retry counts, and lock keys s
 - **AND** it schedules a retry without losing the workflow run's prior state
 
 ### Requirement: Secrets are excluded from SQLite runtime state
-Symphony MUST NOT store GitHub App private keys, webhook secrets, installation tokens, or Linear API keys in SQLite.
+Symphony MUST NOT store GitHub App private keys, installation tokens, Linear API keys, or other raw secret material in SQLite.
 
 #### Scenario: Symphony persists runtime state after authentication
 - **WHEN** Symphony stores workflow and integration state in SQLite

@@ -7,8 +7,7 @@ Recommended setup order:
 ```mermaid
 flowchart LR
     Host["Prepare Linux host"] --> GitHub["Create GitHub App"]
-    GitHub --> Webhook["Expose and configure GitHub webhook"]
-    Webhook --> Linear["Create Linear service account and API key"]
+    GitHub --> Linear["Create Linear service account and API key"]
     Linear --> Config["Write Symphony config and secrets"]
     Config --> Verify["Run end-to-end verification"]
 ```
@@ -16,14 +15,14 @@ flowchart LR
 ## Files In This Folder
 
 - `linux-host.md`: required host dependencies, filesystem layout, networking, and service-account expectations
-- `github.md`: exact GitHub App permissions, webhook events, installation steps, and repository notes
+- `github.md`: exact GitHub App permissions, polling setup, installation steps, and repository notes
 - `linear.md`: exact Linear account, API key, polling scope, and active-state mapping setup
 
 ## V1 Setup Principles
 
 - Symphony is designed for one Linux host and one operator-owned deployment.
 - Linear is polled, so no Linear webhook setup is required in v1.
-- GitHub comments still require a public HTTPS webhook endpoint.
+- GitHub is also polled in v1, so Symphony does not require public inbound access.
 - OpenSpec and OpenCode run locally, so their CLIs must already work on the host.
 - Secrets should be supplied through environment variables or root-readable files outside git.
 
@@ -31,7 +30,7 @@ flowchart LR
 
 1. Prepare the Linux host and install the required tools.
 2. Create the GitHub App and install it on the target repositories.
-3. Configure the GitHub webhook URL and secret.
+3. Configure the GitHub polling settings and installation details.
 4. Create a dedicated Linear account for Symphony and generate its API key.
 5. Write `/etc/symphony/config.yaml` and inject the required secrets.
 6. Start Symphony under `systemd`.

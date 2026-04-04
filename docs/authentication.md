@@ -9,7 +9,7 @@ Reasons:
 - short-lived installation tokens are safer than long-lived PATs
 - repo access can be granted per installation
 - permissions are easier to reason about and audit
-- webhook support is part of the normal GitHub App model
+- the GitHub App model keeps repository access scoped without requiring a user PAT
 
 ## Recommended GitHub App Permissions
 
@@ -24,18 +24,20 @@ Possible later additions:
 
 - Checks: read and write, if Symphony starts publishing richer execution status
 
-## GitHub Event Intake
+## GitHub Polling Intake
 
-Symphony should receive at least:
+Symphony should poll GitHub for at least:
 
-- `issue_comment` for slash commands on pull requests
-- `pull_request` for reconciliation and future branch state handling
+- new pull request comments on Symphony-managed pull requests
+- pull request state changes for reconciliation and future branch state handling
 
-The webhook handler must:
+The GitHub poller must:
 
-- verify the GitHub webhook signature before parsing JSON
-- reject unknown event types early
-- avoid logging full raw payloads that may contain sensitive content
+- persist enough checkpoint state to avoid reprocessing already-seen comments
+- limit the queried scope to Symphony-managed pull requests or explicitly configured repositories
+- avoid logging full raw API payloads that may contain sensitive content
+
+GitHub App webhooks can remain disabled in v1 because command intake and PR-state reconciliation are polling-driven.
 
 ## How GitHub Auth Is Used
 
@@ -94,7 +96,6 @@ Recommended secret set:
 - `SYMPHONY_GITHUB_APP_ID`
 - `SYMPHONY_GITHUB_INSTALLATION_ID` if a single installation is used
 - `SYMPHONY_GITHUB_PRIVATE_KEY_FILE`
-- `SYMPHONY_GITHUB_WEBHOOK_SECRET`
 - `SYMPHONY_LINEAR_API_TOKEN`
 
 The service should never:
