@@ -1,20 +1,50 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Project: Symphony
+  Description: A Linux-hosted Go service that turns kanban movement into OpenSpec-driven engineering work by converting board activity into branches, specs, PRs, and agent-driven implementation flows.
+  Tech stack: Go application code, SQLite, local OpenSpec/OpenCode CLI execution, GitHub App auth, Linear polling, Markdown docs in docs/.
+  Deployment model: v1 is a single binary running on a single Linux host for a single operator or team environment.
+  Current repo status: design-first; there is not yet a go.mod, runnable service, or canonical build/test command set.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Product expectations:
+  - Symphony polls Linear for work items entering an active state.
+  - Symphony creates deterministic branches and OpenSpec changes in a mapped GitHub repository.
+  - Symphony commits proposal artifacts, pushes the branch, and opens or reuses a pull request to main.
+  - Symphony supports PR comment workflows for spec refinement and /opsx-apply with an allowed agent.
+
+  Architecture preferences:
+  - Keep v1 as a single binary for a single-user Linux host.
+  - Prefer small, explicit interfaces around board providers, SCM providers, execution adapters, and storage.
+  - Keep provider-specific details inside adapters. The core workflow engine should use normalized concepts like work items, transitions, commands, and runs.
+  - Treat OpenSpec CLI JSON output as the source of truth for change and artifact state.
+  - Optimize for operator simplicity first: SQLite, local CLI execution, minimal config, deterministic naming, and reconcile-before-create behavior.
+  - GitHub PR comments are untrusted input until verified, authorized, and parsed.
+  - Design for future Jira-style expansion through adapter seams, not by leaking Linear-specific semantics into the core.
+
+  Documentation and requirements sources:
+  - Start with docs/README.md, then use the relevant files in docs/ for product, architecture, workflow, auth, operations, logging, setup, and database details.
+  - Durable requirements belong in openspec/specs/<capability>/spec.md.
+  - Existing durable specs are split into feature-* and service-* capabilities under openspec/specs/.
+
+  Documentation and testing conventions:
+  - Use MermaidJS for any diagrams in docs, specs, or design artifacts.
+  - Behavior tests should be written in Gherkin .feature files using Feature, Rule, Scenario, Scenario Outline, and Examples appropriately.
+  - Prefer observable behavior assertions over hidden internal-state-only assertions.
+  - Gherkin behavior tests should remain executable from the Go codebase or its CI workflow.
+
+rules:
+  proposal:
+    - Keep the proposal focused on durable user-visible behavior and the reason the change is needed.
+    - Call out important non-goals, operator impact, auth impact, provider impact, or routing assumptions when they materially affect the change.
+    - Keep the proposal aligned with the single-host, GitHub App, Linear polling, and local CLI execution model unless the change is explicitly expanding those boundaries.
+  design:
+    - Preserve the v1 preference for a single binary, SQLite, local CLI execution, and explicit provider adapters unless the change explicitly requires otherwise.
+    - Describe provider-specific behavior inside adapters and keep core orchestration expressed in normalized concepts.
+    - Use MermaidJS for any diagrams.
+  tasks:
+    - Break work into concrete, implementation-ready tasks.
+    - Every proposed change MUST include tasks to write or update behavior test cases in Gherkin .feature format for the changed behavior.
+    - Every proposed change MUST include tasks to implement or update the step bindings, fixtures, and test runner integration needed to execute those Gherkin tests.
+    - Every proposed change MUST include a task to run the relevant automated tests and verify they pass before the change is considered complete.
+    - Do not consider a change complete if the required Gherkin behavior tests are missing or failing.

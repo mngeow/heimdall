@@ -1,0 +1,102 @@
+# Linux Host Setup
+
+## Purpose
+
+This document lists the Linux-side dependencies Symphony needs and the host preparation steps required before GitHub and Linear integration will work.
+
+## Required Runtime Dependencies
+
+Symphony should run as a single compiled Go binary, but the host still needs these external dependencies:
+
+- `git`
+- `openspec`
+- `opencode`
+- CA certificate bundle for outbound HTTPS
+- `systemd` and `journald` for service supervision and log collection
+- writable persistent storage for config, SQLite, repo mirrors, worktrees, and logs
+- a public HTTPS endpoint reachable by GitHub webhooks
+
+## Optional But Recommended Operator Tools
+
+These are not runtime requirements for Symphony itself, but they make troubleshooting much easier:
+
+- `sqlite3`
+- `jq`
+- `curl`
+- `rg`
+
+## Not Required
+
+These should not be required on the production host if Symphony is shipped as a compiled binary:
+
+- a Go toolchain
+- a separate database server
+- a Linear webhook receiver
+- a browser-based admin UI
+
+## Recommended Host Filesystem Layout
+
+```mermaid
+flowchart TB
+    Host["Linux host"] --> Etc["/etc/symphony/"]
+    Host --> VarLib["/var/lib/symphony/"]
+    Host --> VarLog["/var/log/symphony/"]
+    Etc --> Config["config.yaml"]
+    VarLib --> State["state/symphony.db"]
+    VarLib --> Repos["repos/github.com/<owner>/<repo>.git"]
+    VarLib --> Worktrees["worktrees/<provider>/<issue-key>/"]
+    VarLog --> Logs["optional forwarded log files"]
+```
+
+## Service Account Expectations
+
+The Symphony service account should be able to:
+
+- read `/etc/symphony/config.yaml`
+- read the GitHub App private key file if stored separately
+- read environment-backed secrets injected by the service manager
+- create and modify files under `/var/lib/symphony/`
+- execute `git`, `openspec`, and `opencode`
+- open outbound HTTPS connections to GitHub and Linear
+
+It should not need shell access broader than its working directories.
+
+## Network Requirements
+
+Outbound access:
+
+- GitHub API and git-over-HTTPS endpoints
+- Linear API endpoints
+
+Inbound access:
+
+- GitHub webhook deliveries over HTTPS
+
+Linear does not need inbound webhook access in v1 because Symphony polls it.
+
+## Dependency Installation Notes
+
+`git` and `ca-certificates` should come from the Linux distribution packages.
+
+`openspec` and `opencode` should be installed according to their upstream installation instructions and verified on the service account's `PATH` before Symphony is started.
+
+## Verification Commands
+
+Before starting Symphony, verify these commands work under the intended service account:
+
+```bash
+git --version
+openspec --version
+opencode --version
+```
+
+## Final Host Checklist
+
+1. Create the service account.
+2. Install `git`, `openspec`, `opencode`, and CA certificates.
+3. Create `/etc/symphony/`, `/var/lib/symphony/`, and `/var/log/symphony/`.
+4. Place the config file and secrets.
+5. Confirm public HTTPS ingress exists for GitHub webhooks.
+6. Confirm outbound HTTPS works to GitHub and Linear.
+7. Confirm the system clock is synchronized.
+8. Start Symphony with `systemd`.
