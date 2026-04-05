@@ -11,12 +11,18 @@ import (
 
 	"github.com/mngeow/symphony/internal/board/linear"
 	"github.com/mngeow/symphony/internal/config"
+	internalexec "github.com/mngeow/symphony/internal/exec"
+	"github.com/mngeow/symphony/internal/repo"
 	"github.com/mngeow/symphony/internal/scm/github"
 	"github.com/mngeow/symphony/internal/slashcmd"
 	"github.com/mngeow/symphony/internal/store"
 	"github.com/mngeow/symphony/internal/validation"
 	"github.com/mngeow/symphony/internal/workflow"
 )
+
+type activationWorkflowExecutor interface {
+	Execute(context.Context, int64) error
+}
 
 // App represents the Symphony application
 type App struct {
@@ -29,6 +35,7 @@ type App struct {
 	workflowQueue  *store.JobQueue
 	router         *workflow.Router
 	commandIntake  *slashcmd.Intake
+	activationFlow activationWorkflowExecutor
 	ready          bool
 }
 
@@ -65,6 +72,8 @@ func New(ctx context.Context) (*App, error) {
 	}
 
 	queue := store.NewJobQueue(runtimeStore)
+	repoManager := repo.NewManager("")
+	bootstrapRunner := internalexec.NewOpenCodeBootstrapRunner()
 
 	return &App{
 		config:         cfg,
@@ -76,6 +85,7 @@ func New(ctx context.Context) (*App, error) {
 		workflowQueue:  queue,
 		router:         workflow.NewRouter(cfg.Repos),
 		commandIntake:  slashcmd.NewIntake(runtimeStore, queue, logger),
+		activationFlow: workflow.NewBootstrapWorkflow(runtimeStore, repoManager, githubClient, bootstrapRunner, logger),
 		ready:          false,
 	}, nil
 }
@@ -210,7 +220,7 @@ func (a *App) pollLinearOnce(ctx context.Context) error {
 	}
 
 	for _, item := range activated {
-		if err := a.enqueueProposeWorkflow(ctx, item); err != nil {
+		if err := a.startBootstrapWorkflow(ctx, item); err != nil {
 			return err
 		}
 	}
@@ -222,18 +232,20 @@ func (a *App) pollLinearOnce(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) enqueueProposeWorkflow(ctx context.Context, item linear.WorkItem) error {
+func (a *App) startBootstrapWorkflow(ctx context.Context, item linear.WorkItem) error {
 	route := a.router.Resolve(item.Team)
 	if !route.Matched {
 		a.logger.Warn(
 			"no repository route for activated linear issue",
-			"issue", item.Key,
+			"work_item_key", item.Key,
 			"team", item.Team,
 			"project", item.Project,
 			"reason", route.Reason,
+			"step", "resolve_repository",
 		)
 		return nil
 	}
+	a.logger.Info("resolved repository for activated work item", "work_item_key", item.Key, "repository", route.Repository.Name, "step", "resolve_repository")
 
 	repository, err := a.store.GetRepositoryByRef(ctx, route.Repository.Name)
 	if err != nil {
@@ -256,18 +268,31 @@ func (a *App) enqueueProposeWorkflow(ctx context.Context, item linear.WorkItem) 
 		return fmt.Errorf("failed to load active binding for %s: %w", item.Key, err)
 	}
 	if binding != nil {
-		a.logger.Info("reusing existing binding for activated linear issue", "issue", item.Key, "repository", repository.RepoRef, "binding_id", binding.ID)
+		a.logger.Info("reusing existing binding for activated linear issue", "work_item_key", item.Key, "repository", repository.RepoRef, "binding_id", binding.ID, "branch", binding.BranchName, "step", "binding_reuse")
 		return nil
 	}
 
-	slug := workflow.Slugify(item.Title)
+	slug := workflow.SlugFromDescriptionOrTitle(workItem.Description, workItem.Title)
 	changeName := workflow.GenerateChangeName(item.Key, slug)
-	branchName := workflow.GenerateBranchName(item.Key, slug)
-	if err := workflow.EnqueueProposeWorkflow(ctx, a.store, a.workflowQueue, workItem.ID, repository.ID, changeName, branchName); err != nil {
-		return fmt.Errorf("failed to enqueue propose workflow for %s: %w", item.Key, err)
+	branchName := workflow.GenerateBranchName(repository.BranchPrefix, item.Key, slug)
+	run, err := workflow.CreateBootstrapWorkflowRun(ctx, a.store, workItem.ID, repository, changeName, branchName)
+	if err != nil {
+		return fmt.Errorf("failed to create bootstrap workflow run for %s: %w", item.Key, err)
+	}
+	a.logger.Info(
+		"created activation bootstrap workflow run",
+		"workflow_run_id", run.ID,
+		"work_item_key", item.Key,
+		"repository", repository.RepoRef,
+		"branch", branchName,
+		"step", "workflow_run_created",
+	)
+
+	if err := a.activationFlow.Execute(ctx, run.ID); err != nil {
+		return fmt.Errorf("failed to execute bootstrap workflow for %s: %w", item.Key, err)
 	}
 
-	a.logger.Info("queued propose workflow from linear activation", "issue", item.Key, "repository", repository.RepoRef, "change", changeName)
+	a.logger.Info("completed activation bootstrap workflow", "workflow_run_id", run.ID, "work_item_key", item.Key, "repository", repository.RepoRef, "branch", branchName, "step", "workflow_complete")
 	return nil
 }
 

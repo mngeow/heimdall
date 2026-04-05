@@ -2,42 +2,42 @@
 
 ## ADDED Requirements
 
-### Requirement: Proposal generation is seeded from work item content
-Symphony MUST create or reuse an OpenSpec change for an activated work item and MUST generate the artifacts required for implementation readiness from the work item title and description.
+### Requirement: Activation bootstrap is seeded from work item content
+Symphony MUST extract the activated work item's title and description and MUST use that content as the seed for the activation-triggered bootstrap pull request flow.
 
-#### Scenario: Symphony creates a new change from an activated issue
-- **WHEN** Symphony handles an activated work item that does not yet have an OpenSpec change in the target repository
-- **THEN** Symphony creates a new OpenSpec change for that work item
-- **AND** Symphony generates the required artifacts using the work item title and description as the proposal seed
+#### Scenario: Symphony prepares a bootstrap run from an activated issue
+- **WHEN** Symphony handles an activated work item that does not yet have an active automation binding in the target repository
+- **THEN** it extracts the work item title and description for the bootstrap prompt context
+- **AND** it passes that context into the local OpenCode execution that will create the initial repository change
 
-### Requirement: Proposal generation follows OpenSpec workflow state
-Symphony MUST use OpenSpec CLI JSON output as the source of truth for artifact status, dependency order, and apply readiness.
+### Requirement: Initial activation bootstrap does not require OpenSpec change creation
+Symphony MUST NOT depend on OpenSpec change creation or OpenSpec artifact generation to complete the initial activation-triggered bootstrap pull request flow.
 
-#### Scenario: Artifact generation order is determined for a change
-- **WHEN** Symphony prepares to generate or update proposal artifacts for a change
-- **THEN** it reads OpenSpec status and instructions from CLI JSON output
-- **AND** it generates artifacts in the dependency order returned by OpenSpec instead of inferring the order from filesystem conventions alone
+#### Scenario: Activation bootstrap is prepared for execution
+- **WHEN** Symphony prepares the activation-triggered bootstrap workflow for a routed work item
+- **THEN** it does not require an OpenSpec change to exist before creating the branch and worktree
+- **AND** it proceeds by invoking the local OpenCode bootstrap execution directly from the issue seed data
 
-### Requirement: Branches and change names are deterministic
-Symphony MUST use deterministic branch and change naming so retries reconcile existing work instead of creating duplicate work branches.
+### Requirement: Branches are deterministic
+Symphony MUST use deterministic branch naming for activation bootstrap so retries reconcile existing work instead of creating duplicate work branches.
 
-#### Scenario: Symphony creates branch and change names for a work item
-- **WHEN** Symphony prepares a proposal branch for work item `ENG-123` with slug `add-rate-limit`
-- **THEN** it names the branch `symphony/ENG-123-add-rate-limit`
-- **AND** it names the OpenSpec change `ENG-123-add-rate-limit`
+#### Scenario: Symphony creates a branch name for an activated work item
+- **WHEN** Symphony prepares a bootstrap branch for work item `ENG-123` whose description yields slug `add-rate-limiting`
+- **THEN** it names the branch `symphony/ENG-123-add-rate-limiting`
+- **AND** it reuses that same branch identity on later retries for the same work item and repository
 
-### Requirement: Proposal artifacts are committed, pushed, and opened as a pull request
-Symphony MUST commit generated proposal artifacts to the proposal branch, push the branch to GitHub, and open or reuse a pull request against the configured base branch.
+### Requirement: Bootstrap changes are committed, pushed, and opened as a pull request
+Symphony MUST commit the activation-triggered bootstrap changes to the branch, push the branch to GitHub, and open or reuse a pull request against the configured base branch.
 
-#### Scenario: Symphony completes proposal scaffolding for a work item
-- **WHEN** Symphony finishes generating the required proposal artifacts for a routed work item
-- **THEN** it commits and pushes the proposal branch
+#### Scenario: Symphony completes bootstrap scaffolding for a work item
+- **WHEN** Symphony finishes the activation-triggered OpenCode bootstrap execution for a routed work item and repository changes exist
+- **THEN** it commits and pushes the bootstrap branch
 - **AND** it opens or reuses a pull request targeting the configured base branch
 
-### Requirement: Proposal pull requests advertise next actions
-Symphony MUST publish a pull request comment that identifies the generated change and the supported next commands after proposal creation.
+### Requirement: Bootstrap pull requests preserve source issue context
+Symphony MUST publish a pull request title and description that reflect the source issue and the generated bootstrap change.
 
-#### Scenario: Proposal pull request is opened
-- **WHEN** Symphony creates or reuses the proposal pull request for a work item
-- **THEN** it comments with the change name and current proposal status
-- **AND** it lists the supported next actions for refinement and apply workflows
+#### Scenario: Bootstrap pull request is opened
+- **WHEN** Symphony creates or reuses the bootstrap pull request for a work item
+- **THEN** the pull request title references the issue title
+- **AND** the pull request description includes the issue description and a short summary of the generated bootstrap change

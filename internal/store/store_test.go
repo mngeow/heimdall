@@ -54,9 +54,12 @@ func TestStore(t *testing.T) {
 			ProviderWorkItemID: "linear-123",
 			WorkItemKey:        "ENG-123",
 			Title:              "Test Issue",
+			Description:        "Detailed description",
 			StateName:          "In Progress",
 			LifecycleBucket:    "active",
+			Project:            "Core Platform",
 			Team:               "ENG",
+			Labels:             []string{"backend", "urgent"},
 		}
 
 		// Save work item
@@ -73,6 +76,12 @@ func TestStore(t *testing.T) {
 			t.Error("expected work item, got nil")
 		} else if retrieved.Title != "Test Issue" {
 			t.Errorf("expected 'Test Issue', got %s", retrieved.Title)
+		} else if retrieved.Description != "Detailed description" {
+			t.Errorf("expected description to round-trip, got %q", retrieved.Description)
+		} else if retrieved.Project != "Core Platform" {
+			t.Errorf("expected project to round-trip, got %q", retrieved.Project)
+		} else if len(retrieved.Labels) != 2 || retrieved.Labels[0] != "backend" || retrieved.Labels[1] != "urgent" {
+			t.Errorf("expected labels to round-trip, got %#v", retrieved.Labels)
 		}
 	})
 
@@ -103,6 +112,80 @@ func TestStore(t *testing.T) {
 			t.Errorf("expected owner 'test', got %s", retrieved.Owner)
 		}
 	})
+}
+
+func TestWorkflowRunStatusReason(t *testing.T) {
+	ctx := context.Background()
+	runtimeStore, err := New(":memory:")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer runtimeStore.Close()
+
+	if err := runtimeStore.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	if err := runtimeStore.SaveRepository(ctx, &Repository{
+		Provider:        "github",
+		RepoRef:         "github.com/test/repo",
+		Owner:           "test",
+		Name:            "repo",
+		DefaultBranch:   "main",
+		BranchPrefix:    "symphony",
+		LocalMirrorPath: "/tmp/test-repo.git",
+		IsActive:        true,
+	}); err != nil {
+		t.Fatalf("SaveRepository() error = %v", err)
+	}
+
+	workItem := &WorkItem{
+		Provider:           "linear",
+		ProviderWorkItemID: "linear-123",
+		WorkItemKey:        "ENG-123",
+		Title:              "Test Issue",
+		StateName:          "In Progress",
+		LifecycleBucket:    "active",
+	}
+	if err := runtimeStore.SaveWorkItem(ctx, workItem); err != nil {
+		t.Fatalf("SaveWorkItem() error = %v", err)
+	}
+	repoRecord, err := runtimeStore.GetRepositoryByRef(ctx, "github.com/test/repo")
+	if err != nil {
+		t.Fatalf("GetRepositoryByRef() error = %v", err)
+	}
+
+	run := &WorkflowRun{
+		WorkItemID:      workItem.ID,
+		RepositoryID:    repoRecord.ID,
+		RunType:         "bootstrap_pull_request",
+		Status:          "queued",
+		ChangeName:      "ENG-123-test-issue",
+		BranchName:      "symphony/ENG-123-test-issue",
+		WorktreePath:    "/tmp/worktree",
+		RequestedByType: "system",
+	}
+	if err := runtimeStore.CreateWorkflowRun(ctx, run); err != nil {
+		t.Fatalf("CreateWorkflowRun() error = %v", err)
+	}
+
+	if err := runtimeStore.UpdateWorkflowRunStatus(ctx, run.ID, "blocked", "bootstrap execution produced no file changes"); err != nil {
+		t.Fatalf("UpdateWorkflowRunStatus() error = %v", err)
+	}
+
+	retrieved, err := runtimeStore.GetWorkflowRun(ctx, run.ID)
+	if err != nil {
+		t.Fatalf("GetWorkflowRun() error = %v", err)
+	}
+	if retrieved == nil {
+		t.Fatal("expected workflow run, got nil")
+	}
+	if retrieved.Status != "blocked" {
+		t.Fatalf("expected blocked status, got %q", retrieved.Status)
+	}
+	if retrieved.StatusReason != "bootstrap execution produced no file changes" {
+		t.Fatalf("expected blocked reason to round-trip, got %q", retrieved.StatusReason)
+	}
 }
 
 func TestJobQueue(t *testing.T) {

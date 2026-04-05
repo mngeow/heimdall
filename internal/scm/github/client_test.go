@@ -71,6 +71,40 @@ func TestListIssueCommentsSince(t *testing.T) {
 	}
 }
 
+func TestFindOpenPullRequestByHead(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/app/installations/42/access_tokens":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"token":"installation-token"}`))
+		case "/repos/acme/platform/pulls":
+			if got := r.URL.Query().Get("head"); got != "acme:symphony/ENG-123-add-rate-limiting" {
+				t.Fatalf("expected head query, got %q", got)
+			}
+			if got := r.URL.Query().Get("base"); got != "main" {
+				t.Fatalf("expected base query, got %q", got)
+			}
+			if got := r.URL.Query().Get("state"); got != "open" {
+				t.Fatalf("expected open state, got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`[{"number":42,"node_id":"PR_node_42","title":"Bootstrap PR","state":"open","html_url":"https://example.test/pr/42"}]`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server)
+	pullRequest, err := client.FindOpenPullRequestByHead(t.Context(), "acme", "platform", "symphony/ENG-123-add-rate-limiting", "main")
+	if err != nil {
+		t.Fatalf("FindOpenPullRequestByHead() error = %v", err)
+	}
+	if pullRequest == nil || pullRequest.GetNumber() != 42 {
+		t.Fatalf("expected open pull request #42, got %#v", pullRequest)
+	}
+}
+
 func TestParseRepoRef(t *testing.T) {
 	tests := []struct {
 		name    string

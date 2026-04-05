@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/mngeow/symphony/internal/config"
@@ -54,9 +55,13 @@ func (r *Router) Resolve(teamKey string) *RouteResult {
 	}
 }
 
-// GenerateBranchName creates a deterministic branch name
-func GenerateBranchName(issueKey, slug string) string {
-	return fmt.Sprintf("symphony/%s-%s", issueKey, slug)
+// GenerateBranchName creates a deterministic branch name.
+func GenerateBranchName(branchPrefix, issueKey, slug string) string {
+	prefix := strings.Trim(strings.TrimSpace(branchPrefix), "/")
+	if prefix == "" {
+		prefix = "symphony"
+	}
+	return fmt.Sprintf("%s/%s-%s", prefix, issueKey, slug)
 }
 
 // GenerateChangeName creates a deterministic OpenSpec change name
@@ -64,52 +69,60 @@ func GenerateChangeName(issueKey, slug string) string {
 	return fmt.Sprintf("%s-%s", issueKey, slug)
 }
 
-// Slugify creates a URL-safe slug from a title
-func Slugify(title string) string {
-	// Simple slugification - replace spaces with hyphens, lowercase
-	slug := strings.ToLower(title)
-	slug = strings.ReplaceAll(slug, " ", "-")
-
-	// Remove non-alphanumeric characters except hyphens
+// Slugify creates a URL-safe slug from free-form text.
+func Slugify(text string) string {
 	var result strings.Builder
-	for _, r := range slug {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+	lastDash := false
+
+	for _, r := range strings.ToLower(text) {
+		isAlphaNum := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if isAlphaNum {
 			result.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash && result.Len() > 0 {
+			result.WriteRune('-')
+			lastDash = true
 		}
 	}
 
-	return result.String()
+	slug := strings.Trim(result.String(), "-")
+	return slug
 }
 
-// EnqueueProposeWorkflow creates a propose workflow run for a work item
-func EnqueueProposeWorkflow(ctx context.Context, s *store.Store, queue *store.JobQueue, workItemID, repositoryID int64, changeName, branchName string) error {
-	// Create workflow run
+// SlugFromDescriptionOrTitle returns a description-first slug with title fallback.
+func SlugFromDescriptionOrTitle(description, title string) string {
+	if slug := Slugify(description); slug != "" {
+		return slug
+	}
+	return Slugify(title)
+}
+
+// GenerateWorktreePath creates a deterministic worktree path next to the configured mirror.
+func GenerateWorktreePath(localMirrorPath, branchName string) string {
+	mirrorDir := filepath.Dir(localMirrorPath)
+	mirrorBase := strings.TrimSuffix(filepath.Base(localMirrorPath), filepath.Ext(localMirrorPath))
+	branchComponent := strings.NewReplacer("/", "-", "\\", "-", ":", "-").Replace(branchName)
+	return filepath.Join(mirrorDir, mirrorBase+"-worktrees", branchComponent)
+}
+
+// CreateBootstrapWorkflowRun creates a bootstrap workflow run for an activated work item.
+func CreateBootstrapWorkflowRun(ctx context.Context, s *store.Store, workItemID int64, repository *store.Repository, changeName, branchName string) (*store.WorkflowRun, error) {
 	run := &store.WorkflowRun{
 		WorkItemID:      workItemID,
-		RepositoryID:    repositoryID,
-		RunType:         "propose",
+		RepositoryID:    repository.ID,
+		RunType:         "bootstrap_pull_request",
 		Status:          "queued",
 		ChangeName:      changeName,
 		BranchName:      branchName,
-		WorktreePath:    fmt.Sprintf("/var/lib/symphony/worktrees/linear/%s", changeName),
+		WorktreePath:    GenerateWorktreePath(repository.LocalMirrorPath, branchName),
 		RequestedByType: "system",
 	}
 
 	if err := s.CreateWorkflowRun(ctx, run); err != nil {
-		return fmt.Errorf("failed to create workflow run: %w", err)
+		return nil, fmt.Errorf("failed to create workflow run: %w", err)
 	}
 
-	// Enqueue job
-	job := &store.Job{
-		WorkflowRunID: &run.ID,
-		JobType:       "propose",
-		LockKey:       store.CreateIssueLockKey("linear", changeName),
-		Status:        "queued",
-	}
-
-	if err := queue.Enqueue(ctx, job); err != nil {
-		return fmt.Errorf("failed to enqueue job: %w", err)
-	}
-
-	return nil
+	return run, nil
 }

@@ -15,7 +15,17 @@ import (
 	"github.com/mngeow/symphony/internal/workflow"
 )
 
-func TestPollLinearOnceQueuesProposeWorkflow(t *testing.T) {
+type stubActivationFlow struct {
+	runID int64
+	err   error
+}
+
+func (s *stubActivationFlow) Execute(_ context.Context, runID int64) error {
+	s.runID = runID
+	return s.err
+}
+
+func TestPollLinearOnceCreatesBootstrapWorkflowRun(t *testing.T) {
 	ctx := context.Background()
 	runtimeStore, err := store.New(":memory:")
 	if err != nil {
@@ -51,14 +61,14 @@ func TestPollLinearOnceQueuesProposeWorkflow(t *testing.T) {
 	}))
 	defer server.Close()
 
-	queue := store.NewJobQueue(runtimeStore)
+	fakeFlow := &stubActivationFlow{}
 	application := &App{
 		config:         cfg,
 		logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 		store:          runtimeStore,
 		linearProvider: linear.NewProvider(cfg.Linear.APIToken, cfg.Linear.ProjectName, cfg.Linear.ActiveStates, cfg.Linear.PollInterval, runtimeStore, linear.WithEndpoint(server.URL), linear.WithHTTPClient(server.Client()), linear.WithNow(func() time.Time { return time.Date(2026, time.April, 5, 10, 0, 0, 0, time.UTC) })),
-		workflowQueue:  queue,
 		router:         workflow.NewRouter(cfg.Repos),
+		activationFlow: fakeFlow,
 	}
 
 	if err := application.pollLinearOnce(ctx); err != nil {
@@ -72,12 +82,25 @@ func TestPollLinearOnceQueuesProposeWorkflow(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("expected saved Linear work item snapshot")
 	}
-
-	job, err := queue.Dequeue(ctx)
-	if err != nil {
-		t.Fatalf("Dequeue() error = %v", err)
+	if snapshot.Description != "More details" {
+		t.Fatalf("expected saved description, got %q", snapshot.Description)
 	}
-	if job == nil || job.JobType != "propose" {
-		t.Fatalf("expected propose job, got %#v", job)
+
+	if fakeFlow.runID == 0 {
+		t.Fatal("expected activation workflow executor to be invoked")
+	}
+
+	run, err := runtimeStore.GetWorkflowRun(ctx, fakeFlow.runID)
+	if err != nil {
+		t.Fatalf("GetWorkflowRun() error = %v", err)
+	}
+	if run == nil {
+		t.Fatal("expected workflow run to be created")
+	}
+	if run.RunType != "bootstrap_pull_request" {
+		t.Fatalf("expected bootstrap run type, got %q", run.RunType)
+	}
+	if run.BranchName != "symphony/ENG-123-more-details" {
+		t.Fatalf("expected description-seeded branch, got %q", run.BranchName)
 	}
 }

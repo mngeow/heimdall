@@ -5,8 +5,8 @@
 ### Requirement: GitHub integration uses a GitHub App
 Symphony MUST use a GitHub App for GitHub API and git push operations and MUST rely on short-lived installation tokens for repository mutations.
 
-#### Scenario: Symphony needs to push a proposal branch
-- **WHEN** Symphony needs to push a proposal or apply branch to GitHub
+#### Scenario: Symphony needs to push a bootstrap branch
+- **WHEN** Symphony needs to push an activation-triggered bootstrap branch to GitHub
 - **THEN** it mints a short-lived installation token from its GitHub App configuration
 - **AND** it uses that token for the branch push instead of a long-lived personal access token
 
@@ -26,10 +26,10 @@ Symphony MUST poll GitHub for new pull request comments and relevant pull reques
 ### Requirement: GitHub repository operations support the automation lifecycle
 The GitHub SCM service MUST create or reuse branches, open or reuse pull requests, and publish pull request comments for Symphony workflows.
 
-#### Scenario: Symphony publishes a proposal pull request
-- **WHEN** a proposal workflow succeeds for a mapped repository
-- **THEN** the GitHub SCM service ensures the proposal branch exists in the repository
-- **AND** it opens or reuses a pull request against the configured base branch and publishes the related Symphony status comment
+#### Scenario: Symphony publishes a bootstrap pull request
+- **WHEN** an activation-triggered bootstrap workflow succeeds for a mapped repository
+- **THEN** the GitHub SCM service ensures the bootstrap branch exists in the repository
+- **AND** it opens or reuses a pull request against the configured base branch with the bootstrap title and description derived from the source issue
 
 ### Requirement: GitHub command actors are authorized before mutation
 Symphony MUST authorize pull request command actors based on collaborator rights and repository allowlists before running repository mutation workflows.
