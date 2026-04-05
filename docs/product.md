@@ -33,7 +33,7 @@ The user should not need a separate Symphony UI in V1.
 To keep V1 easy to operate and easy to adopt, the design makes these choices:
 
 - one service binary, not multiple deployable services
-- one local config file plus environment-backed secrets
+- one project-root `.env` file plus optional file-backed secret references
 - SQLite by default, so a single Linux VM is enough to run the system
 - polling for Linear to avoid requiring public ingress from Linear
 - polling for GitHub PR command intake to avoid requiring public ingress from GitHub

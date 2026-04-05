@@ -3,121 +3,333 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	env "github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
 )
 
-// Config represents the Symphony configuration
+const (
+	dotenvFileName       = ".env"
+	legacyConfigBaseName = "config"
+)
+
+var repoIDPattern = regexp.MustCompile(`^[A-Z0-9_]+$`)
+
+// Config represents the Symphony configuration.
 type Config struct {
-	Server  ServerConfig  `yaml:"server"`
-	Storage StorageConfig `yaml:"storage"`
-	Linear  LinearConfig  `yaml:"linear"`
-	GitHub  GitHubConfig  `yaml:"github"`
-	Repos   []RepoConfig  `yaml:"repos"`
+	Server  ServerConfig
+	Storage StorageConfig
+	Linear  LinearConfig
+	GitHub  GitHubConfig
+	Repos   []RepoConfig
 }
 
-// ServerConfig represents HTTP server configuration
+// ServerConfig represents HTTP server configuration.
 type ServerConfig struct {
-	ListenAddress string `yaml:"listen_address"`
-	PublicURL     string `yaml:"public_url"`
+	ListenAddress string `env:"LISTEN_ADDRESS" envDefault:":8080"`
+	PublicURL     string `env:"PUBLIC_URL"`
 }
 
-// StorageConfig represents database configuration
+// StorageConfig represents database configuration.
 type StorageConfig struct {
-	Driver string `yaml:"driver"`
-	DSN    string `yaml:"dsn"`
+	Driver string `env:"DRIVER" envDefault:"sqlite"`
+	DSN    string `env:"DSN" envDefault:"/var/lib/symphony/state/symphony.db"`
 }
 
-// LinearConfig represents Linear integration configuration
+// LinearConfig represents Linear integration configuration.
 type LinearConfig struct {
-	PollInterval time.Duration `yaml:"poll_interval"`
-	ActiveStates []string      `yaml:"active_states"`
-	TeamKeys     []string      `yaml:"team_keys"`
-	APIToken     string        // loaded from env
+	PollInterval time.Duration `env:"POLL_INTERVAL" envDefault:"30s"`
+	ActiveStates []string      `env:"ACTIVE_STATES,required" envSeparator:","`
+	TeamKeys     []string      `env:"TEAM_KEYS,required" envSeparator:","`
+	APIToken     string        `env:"API_TOKEN,required,notEmpty"`
 }
 
-// GitHubConfig represents GitHub integration configuration
+// GitHubConfig represents GitHub integration configuration.
 type GitHubConfig struct {
-	BaseBranch     string        `yaml:"base_branch"`
-	PollInterval   time.Duration `yaml:"poll_interval"`
-	LookbackWindow time.Duration `yaml:"lookback_window"`
-	AppID          string        // loaded from env
-	InstallationID int64         // loaded from env
-	PrivateKey     string        // loaded from env or file
+	BaseBranch     string        `env:"BASE_BRANCH" envDefault:"main"`
+	PollInterval   time.Duration `env:"POLL_INTERVAL" envDefault:"30s"`
+	LookbackWindow time.Duration `env:"LOOKBACK_WINDOW" envDefault:"2m"`
+	AppID          string        `env:"APP_ID,required,notEmpty"`
+	InstallationID int64         `env:"INSTALLATION_ID,required"`
+	PrivateKey     string
 }
 
-// RepoConfig represents a managed repository
+// RepoConfig represents a managed repository.
 type RepoConfig struct {
-	Name            string   `yaml:"name"`
-	LocalMirrorPath string   `yaml:"local_mirror_path"`
-	DefaultBranch   string   `yaml:"default_branch"`
-	BranchPrefix    string   `yaml:"branch_prefix"`
-	LinearTeamKeys  []string `yaml:"linear_team_keys"`
-	AllowedAgents   []string `yaml:"allowed_agents"`
-	AllowedUsers    []string `yaml:"allowed_users"`
+	ID              string
+	Name            string   `env:"NAME,required,notEmpty"`
+	LocalMirrorPath string   `env:"LOCAL_MIRROR_PATH,required,notEmpty"`
+	DefaultBranch   string   `env:"DEFAULT_BRANCH" envDefault:"main"`
+	BranchPrefix    string   `env:"BRANCH_PREFIX" envDefault:"symphony"`
+	LinearTeamKeys  []string `env:"LINEAR_TEAM_KEYS" envSeparator:","`
+	AllowedAgents   []string `env:"ALLOWED_AGENTS,required" envSeparator:","`
+	AllowedUsers    []string `env:"ALLOWED_USERS,required" envSeparator:","`
 }
 
-// Load loads configuration from file and environment
+type rootEnvConfig struct {
+	Server  ServerConfig    `envPrefix:"SYMPHONY_SERVER_"`
+	Storage StorageConfig   `envPrefix:"SYMPHONY_STORAGE_"`
+	Linear  LinearConfig    `envPrefix:"SYMPHONY_LINEAR_"`
+	GitHub  githubEnvConfig `envPrefix:"SYMPHONY_GITHUB_"`
+	RepoIDs []string        `env:"SYMPHONY_REPOS,required" envSeparator:","`
+}
+
+type githubEnvConfig struct {
+	BaseBranch     string        `env:"BASE_BRANCH" envDefault:"main"`
+	PollInterval   time.Duration `env:"POLL_INTERVAL" envDefault:"30s"`
+	LookbackWindow time.Duration `env:"LOOKBACK_WINDOW" envDefault:"2m"`
+	AppID          string        `env:"APP_ID,required,notEmpty"`
+	InstallationID int64         `env:"INSTALLATION_ID,required"`
+	PrivateKey     string        `env:"PRIVATE_KEY"`
+	PrivateKeyFile string        `env:"PRIVATE_KEY_FILE,file"`
+}
+
+// Load loads configuration from environment variables and an optional project-root .env file.
 func Load() (*Config, error) {
-	configPath := os.Getenv("SYMPHONY_CONFIG_PATH")
-	if configPath == "" {
-		configPath = "/etc/symphony/config.yaml"
-	}
-
-	data, err := os.ReadFile(configPath)
+	projectRoot, err := os.Getwd()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("failed to resolve project root: %w", err)
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+	return LoadFromDir(projectRoot)
+}
+
+// LoadFromDir loads Symphony configuration for a specific project root.
+func LoadFromDir(projectRoot string) (*Config, error) {
+	environment, err := loadEnvironment(projectRoot)
+	if err != nil {
+		return nil, err
 	}
 
-	// Apply defaults
-	if cfg.Server.ListenAddress == "" {
-		cfg.Server.ListenAddress = ":8080"
-	}
-	if cfg.Storage.Driver == "" {
-		cfg.Storage.Driver = "sqlite"
-	}
-	if cfg.Storage.DSN == "" {
-		cfg.Storage.DSN = "/var/lib/symphony/state/symphony.db"
-	}
-	if cfg.GitHub.BaseBranch == "" {
-		cfg.GitHub.BaseBranch = "main"
-	}
-	if cfg.GitHub.PollInterval == 0 {
-		cfg.GitHub.PollInterval = 30 * time.Second
-	}
-	if cfg.GitHub.LookbackWindow == 0 {
-		cfg.GitHub.LookbackWindow = 2 * time.Minute
+	root, err := env.ParseAsWithOptions[rootEnvConfig](env.Options{Environment: environment})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse environment configuration: %w", err)
 	}
 
-	// Load secrets from environment
-	cfg.Linear.APIToken = os.Getenv("SYMPHONY_LINEAR_API_TOKEN")
-	cfg.GitHub.AppID = os.Getenv("SYMPHONY_GITHUB_APP_ID")
-	installationID := os.Getenv("SYMPHONY_GITHUB_INSTALLATION_ID")
-	if installationID != "" {
-		parsedInstallationID, err := strconv.ParseInt(installationID, 10, 64)
+	config := &Config{
+		Server:  root.Server,
+		Storage: root.Storage,
+		Linear: LinearConfig{
+			PollInterval: root.Linear.PollInterval,
+			ActiveStates: trimNonEmpty(root.Linear.ActiveStates),
+			TeamKeys:     trimNonEmpty(root.Linear.TeamKeys),
+			APIToken:     strings.TrimSpace(root.Linear.APIToken),
+		},
+		GitHub: GitHubConfig{
+			BaseBranch:     strings.TrimSpace(root.GitHub.BaseBranch),
+			PollInterval:   root.GitHub.PollInterval,
+			LookbackWindow: root.GitHub.LookbackWindow,
+			AppID:          strings.TrimSpace(root.GitHub.AppID),
+			InstallationID: root.GitHub.InstallationID,
+			PrivateKey:     strings.TrimSpace(selectGitHubPrivateKey(root.GitHub)),
+		},
+	}
+
+	repoIDs := trimNonEmpty(root.RepoIDs)
+	for _, repoID := range repoIDs {
+		repoConfig, err := loadRepoConfig(environment, repoID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse SYMPHONY_GITHUB_INSTALLATION_ID: %w", err)
+			return nil, err
 		}
-		cfg.GitHub.InstallationID = parsedInstallationID
+		config.Repos = append(config.Repos, repoConfig)
 	}
 
-	privateKeyFile := os.Getenv("SYMPHONY_GITHUB_PRIVATE_KEY_FILE")
-	if privateKeyFile != "" {
-		privateKey, err := os.ReadFile(privateKeyFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read SYMPHONY_GITHUB_PRIVATE_KEY_FILE: %w", err)
-		}
-		cfg.GitHub.PrivateKey = string(privateKey)
-	} else {
-		cfg.GitHub.PrivateKey = os.Getenv("SYMPHONY_GITHUB_PRIVATE_KEY")
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
-	return &cfg, nil
+	return config, nil
+}
+
+// Validate ensures the loaded configuration is internally consistent.
+func (c *Config) Validate() error {
+	if len(c.Linear.ActiveStates) == 0 {
+		return fmt.Errorf("SYMPHONY_LINEAR_ACTIVE_STATES must include at least one state")
+	}
+	if len(c.Linear.TeamKeys) == 0 {
+		return fmt.Errorf("SYMPHONY_LINEAR_TEAM_KEYS must include at least one team key")
+	}
+	if c.GitHub.PrivateKey == "" {
+		return fmt.Errorf("either SYMPHONY_GITHUB_PRIVATE_KEY or SYMPHONY_GITHUB_PRIVATE_KEY_FILE must be set")
+	}
+	if c.GitHub.PollInterval <= 0 {
+		return fmt.Errorf("SYMPHONY_GITHUB_POLL_INTERVAL must be greater than zero")
+	}
+	if c.GitHub.LookbackWindow <= 0 {
+		return fmt.Errorf("SYMPHONY_GITHUB_LOOKBACK_WINDOW must be greater than zero")
+	}
+	if len(c.Repos) == 0 {
+		return fmt.Errorf("SYMPHONY_REPOS must declare at least one repository")
+	}
+
+	repoRefs := make(map[string]string, len(c.Repos))
+	routedTeams := make(map[string]string)
+	for _, repo := range c.Repos {
+		if repo.Name == "" {
+			return fmt.Errorf("SYMPHONY_REPO_%s_NAME must not be empty", repo.ID)
+		}
+		if repo.LocalMirrorPath == "" {
+			return fmt.Errorf("SYMPHONY_REPO_%s_LOCAL_MIRROR_PATH must not be empty", repo.ID)
+		}
+		if len(repo.AllowedUsers) == 0 {
+			return fmt.Errorf("SYMPHONY_REPO_%s_ALLOWED_USERS must include at least one user", repo.ID)
+		}
+		if len(repo.AllowedAgents) == 0 {
+			return fmt.Errorf("SYMPHONY_REPO_%s_ALLOWED_AGENTS must include at least one agent", repo.ID)
+		}
+		if existingRepoID, exists := repoRefs[repo.Name]; exists {
+			return fmt.Errorf("repository %q is defined more than once by SYMPHONY_REPO_%s_NAME and SYMPHONY_REPO_%s_NAME", repo.Name, existingRepoID, repo.ID)
+		}
+		repoRefs[repo.Name] = repo.ID
+
+		if len(c.Repos) > 1 && len(repo.LinearTeamKeys) == 0 {
+			return fmt.Errorf("SYMPHONY_REPO_%s_LINEAR_TEAM_KEYS must include at least one team key when multiple repositories are configured", repo.ID)
+		}
+
+		for _, teamKey := range repo.LinearTeamKeys {
+			if existingRepoID, exists := routedTeams[teamKey]; exists {
+				return fmt.Errorf("team key %q is configured for both SYMPHONY_REPO_%s_LINEAR_TEAM_KEYS and SYMPHONY_REPO_%s_LINEAR_TEAM_KEYS", teamKey, existingRepoID, repo.ID)
+			}
+			routedTeams[teamKey] = repo.ID
+		}
+	}
+
+	return nil
+}
+
+func loadEnvironment(projectRoot string) (map[string]string, error) {
+	environment := currentEnvironment()
+
+	dotenvPath := filepath.Join(projectRoot, dotenvFileName)
+
+	dotenvExists, err := fileExists(dotenvPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect %s: %w", dotenvPath, err)
+	}
+	legacyYAMLFiles, err := findLegacyYAMLFiles(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect project root for legacy yaml config: %w", err)
+	}
+
+	if !dotenvExists && len(legacyYAMLFiles) > 0 {
+		return nil, fmt.Errorf("legacy YAML configuration files are no longer supported; use %s or environment variables", dotenvPath)
+	}
+
+	if !dotenvExists {
+		return environment, nil
+	}
+
+	fileEnvironment, err := godotenv.Read(dotenvPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", dotenvPath, err)
+	}
+
+	for key, value := range fileEnvironment {
+		if _, exists := environment[key]; exists {
+			continue
+		}
+		environment[key] = value
+	}
+
+	return environment, nil
+}
+
+func loadRepoConfig(environment map[string]string, repoID string) (RepoConfig, error) {
+	repoID = strings.TrimSpace(repoID)
+	if repoID == "" {
+		return RepoConfig{}, fmt.Errorf("SYMPHONY_REPOS must not contain empty repository identifiers")
+	}
+	if !repoIDPattern.MatchString(repoID) {
+		return RepoConfig{}, fmt.Errorf("SYMPHONY_REPOS entry %q must use only A-Z, 0-9, and _ characters", repoID)
+	}
+
+	repoConfig, err := env.ParseAsWithOptions[RepoConfig](env.Options{
+		Environment: environment,
+		Prefix:      repoEnvPrefix(repoID),
+	})
+	if err != nil {
+		return RepoConfig{}, fmt.Errorf("failed to parse repository %s configuration: %w", repoID, err)
+	}
+
+	repoConfig.ID = repoID
+	repoConfig.Name = strings.TrimSpace(repoConfig.Name)
+	repoConfig.LocalMirrorPath = strings.TrimSpace(repoConfig.LocalMirrorPath)
+	repoConfig.DefaultBranch = strings.TrimSpace(repoConfig.DefaultBranch)
+	repoConfig.BranchPrefix = strings.TrimSpace(repoConfig.BranchPrefix)
+	repoConfig.LinearTeamKeys = trimNonEmpty(repoConfig.LinearTeamKeys)
+	repoConfig.AllowedAgents = trimNonEmpty(repoConfig.AllowedAgents)
+	repoConfig.AllowedUsers = trimNonEmpty(repoConfig.AllowedUsers)
+
+	return repoConfig, nil
+}
+
+func selectGitHubPrivateKey(cfg githubEnvConfig) string {
+	if strings.TrimSpace(cfg.PrivateKeyFile) != "" {
+		return cfg.PrivateKeyFile
+	}
+
+	return cfg.PrivateKey
+}
+
+func currentEnvironment() map[string]string {
+	environment := make(map[string]string)
+	for _, entry := range os.Environ() {
+		key, value, found := strings.Cut(entry, "=")
+		if !found {
+			continue
+		}
+		environment[key] = value
+	}
+	return environment
+}
+
+func fileExists(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if err == nil {
+		return !info.IsDir(), nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+func findLegacyYAMLFiles(projectRoot string) ([]string, error) {
+	entries, err := os.ReadDir(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	legacyFiles := make([]string, 0)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name == legacyConfigBaseName+".yaml" || name == legacyConfigBaseName+".yml" {
+			legacyFiles = append(legacyFiles, name)
+		}
+	}
+
+	return legacyFiles, nil
+}
+
+func repoEnvPrefix(repoID string) string {
+	return "SYMPHONY_REPO_" + repoID + "_"
+}
+
+func trimNonEmpty(values []string) []string {
+	trimmed := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		trimmed = append(trimmed, value)
+	}
+	return trimmed
 }

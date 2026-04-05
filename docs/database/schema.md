@@ -4,7 +4,7 @@
 
 The database should capture durable workflow state, not become a second configuration system.
 
-Configuration belongs in `/etc/symphony/config.yaml` and secrets belong in environment variables or external secret files.
+Configuration belongs in the project-root `.env` file or equivalent environment variables, and multiline secrets should be referenced through external secret files where practical.
 
 SQLite stores:
 

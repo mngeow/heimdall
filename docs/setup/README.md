@@ -9,7 +9,7 @@ flowchart LR
     Host["Prepare Linux host"] --> GitHub["Create GitHub App"]
     GitHub --> GitHubPoll["Configure GitHub polling"]
     GitHubPoll --> Linear["Create Linear service account and API key"]
-    Linear --> Config["Write Symphony config and secrets"]
+    Linear --> Config["Create .env and secrets"]
     Config --> Verify["Run end-to-end verification"]
 ```
 
@@ -33,7 +33,7 @@ flowchart LR
 2. Create the GitHub App and install it on the target repositories.
 3. Configure the GitHub polling interval and lookback window.
 4. Create a dedicated Linear account for Symphony and generate its API key.
-5. Write `/etc/symphony/config.yaml` and inject the required secrets.
+5. Copy `dist.env` to the project-root `.env` file and fill in the required values.
 6. Start Symphony under `systemd`.
 7. Move a test Linear issue into the configured active state.
 8. Verify branch creation, OpenSpec proposal generation, PR creation, and PR comment handling.
