@@ -173,9 +173,9 @@ Operational rule:
 - Symphony should dedupe by stable comment identity, not by timestamp alone
 - overlapping windows are expected and safe only if command deduplication is durable
 
-## Step 7: Wire The App Into Symphony Config And Secrets
+## Step 7: Wire The App Into Symphony `.env` And Secrets
 
-Set these secrets:
+Set these entries in the project-root `.env` file or the process environment:
 
 ```bash
 SYMPHONY_GITHUB_APP_ID=<app-id>
@@ -185,7 +185,7 @@ SYMPHONY_GITHUB_PRIVATE_KEY_FILE=/etc/symphony/github-app.pem
 
 Do not set `SYMPHONY_GITHUB_WEBHOOK_SECRET` for the polling-based setup path.
 
-Your Symphony config should capture, at minimum, these GitHub-side semantics:
+Your Symphony environment-variable schema should capture, at minimum, these GitHub-side semantics:
 
 - base branch, usually `main`
 - GitHub polling interval
@@ -194,13 +194,12 @@ Your Symphony config should capture, at minimum, these GitHub-side semantics:
 - allowed GitHub users
 - allowed apply agents
 
-One reasonable polling-oriented config shape is:
+One reasonable polling-oriented `.env` shape is:
 
-```yaml
-github:
-  base_branch: "main"
-  poll_interval: 30s
-  lookback_window: 2m
+```dotenv
+SYMPHONY_GITHUB_BASE_BRANCH=main
+SYMPHONY_GITHUB_POLL_INTERVAL=30s
+SYMPHONY_GITHUB_LOOKBACK_WINDOW=2m
 ```
 
 If your exact config schema differs, preserve the same meaning even if the final field names change.
@@ -265,9 +264,9 @@ For each managed repository, verify:
 - webhook delivery is disabled for the app
 - `main` is the intended base branch
 - the repo accepts pull requests from `symphony/*` branches
-- the repo appears in `/etc/symphony/config.yaml`
-- `allowed_users` contains the operators who may run commands
-- `allowed_agents` contains the agent names permitted for `/opsx-apply`
+- the repo appears in `SYMPHONY_REPOS`
+- `SYMPHONY_REPO_<ID>_ALLOWED_USERS` contains the operators who may run commands
+- `SYMPHONY_REPO_<ID>_ALLOWED_AGENTS` contains the agent names permitted for `/opsx-apply`
 - the GitHub polling interval and lookback semantics are configured for that deployment
 
 ## Easy-To-Miss GitHub Details

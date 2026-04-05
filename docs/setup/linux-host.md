@@ -13,7 +13,7 @@ Symphony should run as a single compiled Go binary, but the host still needs the
 - `opencode`
 - CA certificate bundle for outbound HTTPS
 - `systemd` and `journald` for service supervision and log collection
-- writable persistent storage for config, SQLite, repo mirrors, worktrees, and logs
+- writable persistent storage for the project root, SQLite, repo mirrors, worktrees, and logs
 
 ## Optional But Recommended Operator Tools
 
@@ -38,10 +38,12 @@ These should not be required on the production host if Symphony is shipped as a 
 
 ```mermaid
 flowchart TB
-    Host["Linux host"] --> Etc["/etc/symphony/"]
+    Host["Linux host"] --> Project["/opt/symphony/"]
+    Host --> Etc["/etc/symphony/"]
     Host --> VarLib["/var/lib/symphony/"]
     Host --> VarLog["/var/log/symphony/"]
-    Etc --> Config["config.yaml"]
+    Project --> Config[".env"]
+    Etc --> Key["github-app.pem"]
     VarLib --> State["state/symphony.db"]
     VarLib --> Repos["repos/github.com/<owner>/<repo>.git"]
     VarLib --> Worktrees["worktrees/<provider>/<issue-key>/"]
@@ -52,9 +54,9 @@ flowchart TB
 
 The Symphony service account should be able to:
 
-- read `/etc/symphony/config.yaml`
+- read the project-root `.env`
 - read the GitHub App private key file if stored separately
-- read environment-backed secrets injected by the service manager
+- read environment variables injected by the service manager when they override `.env`
 - create and modify files under `/var/lib/symphony/`
 - execute `git`, `openspec`, and `opencode`
 - open outbound HTTPS connections to GitHub and Linear
@@ -95,8 +97,8 @@ opencode --version
 
 1. Create the service account.
 2. Install `git`, `openspec`, `opencode`, and CA certificates.
-3. Create `/etc/symphony/`, `/var/lib/symphony/`, and `/var/log/symphony/`.
-4. Place the config file and secrets.
+3. Create the Symphony project root, `/etc/symphony/`, `/var/lib/symphony/`, and `/var/log/symphony/`.
+4. Copy `dist.env` to `.env` in the project root and place any referenced secret files.
 5. Confirm outbound HTTPS works to GitHub and Linear.
 6. Confirm the system clock is synchronized.
 7. Start Symphony with `systemd`.

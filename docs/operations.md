@@ -30,10 +30,12 @@ If `opencode` requires its own credentials or local runtime setup, that should b
 
 ```mermaid
 flowchart TB
-    Host["Host filesystem"] --> Etc["/etc/symphony/"]
+    Host["Host filesystem"] --> Project["/opt/symphony/"]
+    Host --> Etc["/etc/symphony/"]
     Host --> VarLib["/var/lib/symphony/"]
     Host --> VarLog["/var/log/symphony/"]
-    Etc --> Config["config.yaml"]
+    Project --> Config[".env"]
+    Etc --> Key["github-app.pem"]
     VarLib --> State["state/symphony.db"]
     VarLib --> Repos["repos/github.com/<owner>/<repo>.git"]
     VarLib --> Worktrees["worktrees/<provider>/<issue-key>/"]
@@ -41,52 +43,43 @@ flowchart TB
 
 ## Configuration Shape
 
-V1 should prefer one human-readable config file and environment-backed secrets.
+V1 should prefer a project-root `.env` file, with process environment variables able to override it when needed.
 
 Example:
 
-```yaml
-server:
-  listen_address: ":8080"
-  public_url: "http://127.0.0.1:8080"
-
-storage:
-  driver: sqlite
-  dsn: "/var/lib/symphony/state/symphony.db"
-
-linear:
-  poll_interval: 30s
-  active_states:
-    - "In Progress"
-  team_keys:
-    - "ENG"
-
-github:
-  base_branch: "main"
-  poll_interval: 30s
-  lookback_window: 2m
-
-repos:
-  - name: "github.com/acme/platform"
-    local_mirror_path: "/var/lib/symphony/repos/github.com/acme/platform.git"
-    default_branch: "main"
-    branch_prefix: "symphony"
-    linear_team_keys:
-      - "ENG"
-    allowed_agents:
-      - "gpt-5.4"
-      - "claude-sonnet"
-    allowed_users:
-      - "mngeow"
+```dotenv
+SYMPHONY_SERVER_LISTEN_ADDRESS=:8080
+SYMPHONY_SERVER_PUBLIC_URL=http://127.0.0.1:8080
+SYMPHONY_STORAGE_DRIVER=sqlite
+SYMPHONY_STORAGE_DSN=/var/lib/symphony/state/symphony.db
+SYMPHONY_LINEAR_POLL_INTERVAL=30s
+SYMPHONY_LINEAR_ACTIVE_STATES=In Progress
+SYMPHONY_LINEAR_TEAM_KEYS=ENG
+SYMPHONY_LINEAR_API_TOKEN=replace-with-linear-api-token
+SYMPHONY_GITHUB_BASE_BRANCH=main
+SYMPHONY_GITHUB_POLL_INTERVAL=30s
+SYMPHONY_GITHUB_LOOKBACK_WINDOW=2m
+SYMPHONY_GITHUB_APP_ID=123456
+SYMPHONY_GITHUB_INSTALLATION_ID=12345678
+SYMPHONY_GITHUB_PRIVATE_KEY_FILE=/etc/symphony/github-app.pem
+SYMPHONY_REPOS=PLATFORM
+SYMPHONY_REPO_PLATFORM_NAME=github.com/acme/platform
+SYMPHONY_REPO_PLATFORM_LOCAL_MIRROR_PATH=/var/lib/symphony/repos/github.com/acme/platform.git
+SYMPHONY_REPO_PLATFORM_DEFAULT_BRANCH=main
+SYMPHONY_REPO_PLATFORM_BRANCH_PREFIX=symphony
+SYMPHONY_REPO_PLATFORM_LINEAR_TEAM_KEYS=ENG
+SYMPHONY_REPO_PLATFORM_ALLOWED_AGENTS=gpt-5.4,claude-sonnet
+SYMPHONY_REPO_PLATFORM_ALLOWED_USERS=mngeow
 ```
 
 Notes:
 
+- `dist.env` should be committed as the documented template, while the live `.env` file remains gitignored
 - if only one repo is configured, routing may skip team matching
 - if multiple repos are configured, routing rules should be explicit and validated at startup
 - GitHub polling should be scoped to managed repositories and managed pull requests to control API volume
 - `public_url` does not need to be Internet-reachable when GitHub polling is used; a private or local operator URL is enough if the field is needed at all
-- secrets should stay outside the file when possible
+- use file-path settings such as `SYMPHONY_GITHUB_PRIVATE_KEY_FILE` when multiline secrets should stay outside the `.env` file
 
 ## Health And Observability
 
@@ -127,7 +120,7 @@ Recommended reconciliation tasks:
 For a single-host SQLite deployment, recovery depends on keeping a small set of things safe:
 
 - the SQLite database
-- the Symphony config file
+- the project-root `.env` file or its equivalent environment-variable source
 - the GitHub App private key
 - the local bare mirrors if fast recovery matters
 

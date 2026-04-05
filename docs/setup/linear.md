@@ -45,18 +45,15 @@ V1 routing should be explicit. If multiple GitHub repositories are involved, do 
 
 Symphony needs to know which Linear states should count as entering active work.
 
-For the first version, this is a config-driven mapping such as:
+For the first version, this is a dotenv-driven mapping such as:
 
-```yaml
-linear:
-  poll_interval: 30s
-  active_states:
-    - "In Progress"
-  team_keys:
-    - "ENG"
+```dotenv
+SYMPHONY_LINEAR_POLL_INTERVAL=30s
+SYMPHONY_LINEAR_ACTIVE_STATES=In Progress
+SYMPHONY_LINEAR_TEAM_KEYS=ENG
 ```
 
-If different teams use different state names, include all relevant values in config.
+If different teams use different state names, include all relevant values in `.env` or the service environment.
 
 ## Step 5: Prepare Linear Ticket Conventions
 
@@ -99,6 +96,6 @@ After Symphony is running:
 ## Easy-To-Miss Linear Details
 
 - No Linear webhook is required in v1.
-- State-name changes in Linear must be reflected in Symphony config.
+- State-name changes in Linear must be reflected in Symphony's environment-variable configuration.
 - If the dedicated Linear account cannot see a team or project, Symphony will silently miss those issues.
 - The issue description quality directly affects the quality of the generated proposal.

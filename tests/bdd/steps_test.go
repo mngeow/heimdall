@@ -3,6 +3,7 @@ package bdd
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 // testContext holds the state for each scenario
 type testContext struct {
 	config           *config.Config
+	configLoadErr    error
 	store            *store.Store
 	queue            *store.JobQueue
 	intake           *slashcmd.Intake
@@ -38,6 +40,13 @@ type testContext struct {
 	duplicateSeen    bool
 	publicWebhook    bool
 	rejectionReason  string
+	projectRoot      string
+	envSnapshot      map[string]envState
+}
+
+type envState struct {
+	value   string
+	present bool
 }
 
 // ctxKey is used to store testContext in context
@@ -76,8 +85,21 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 			parser:        slashcmd.NewParser(nil),
 			pendingActor:  "testuser",
 			publicWebhook: false,
+			envSnapshot:   snapshotSymphonyEnv(),
 		}
 		return context.WithValue(ctx, ctxKey{}, tc), nil
+	})
+
+	sc.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
+		tc := getTC(ctx)
+		if tc.store != nil {
+			tc.store.Close()
+		}
+		if tc.projectRoot != "" {
+			_ = os.RemoveAll(tc.projectRoot)
+		}
+		restoreSymphonyEnv(tc.envSnapshot)
+		return ctx, nil
 	})
 
 	// Background steps
@@ -146,6 +168,8 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^installation tokens are minted$`, installationTokensMinted)
 	sc.Step(`^tokens should not appear in logs$`, tokensNotInLogs)
 	sc.Step(`^tokens should not be stored in SQLite$`, tokensNotInSQLite)
+
+	registerConfigurationSteps(sc)
 }
 
 // Helper to get testContext from context
