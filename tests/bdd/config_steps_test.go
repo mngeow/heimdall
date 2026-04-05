@@ -17,6 +17,7 @@ func registerConfigurationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^a project root with only a legacy Symphony YAML config$`, projectRootWithLegacyYAMLOnly)
 	sc.Step(`^a project root with multi-repository Symphony \.env configuration$`, projectRootWithMultiRepositorySymphonyDotenv)
 	sc.Step(`^a project root with an invalid Symphony \.env file$`, projectRootWithInvalidSymphonyDotenv)
+	sc.Step(`^a project root with a Symphony \.env file missing the Linear project name$`, projectRootWithMissingLinearProjectName)
 	sc.Step(`^the environment overrides "([^"]*)" with "([^"]*)"$`, environmentOverridesValue)
 	sc.Step(`^Symphony loads configuration from that project root$`, symphonyLoadsConfigurationFromProjectRoot)
 	sc.Step(`^configuration loading should succeed$`, configurationLoadingShouldSucceed)
@@ -69,6 +70,11 @@ func projectRootWithMultiRepositorySymphonyDotenv(ctx context.Context) error {
 
 func projectRootWithInvalidSymphonyDotenv(ctx context.Context) error {
 	invalid := strings.ReplaceAll(validConfigurationDotenv("main"), "SYMPHONY_GITHUB_LOOKBACK_WINDOW=2m", "SYMPHONY_GITHUB_LOOKBACK_WINDOW=0s")
+	return writeProjectFile(getTC(ctx), ".env", invalid)
+}
+
+func projectRootWithMissingLinearProjectName(ctx context.Context) error {
+	invalid := strings.ReplaceAll(validConfigurationDotenv("main"), "SYMPHONY_LINEAR_PROJECT_NAME=Core Platform\n", "")
 	return writeProjectFile(getTC(ctx), ".env", invalid)
 }
 
@@ -158,7 +164,7 @@ func validConfigurationDotenv(baseBranch string) string {
 		"SYMPHONY_STORAGE_DSN=/tmp/symphony.db",
 		"SYMPHONY_LINEAR_POLL_INTERVAL=30s",
 		"SYMPHONY_LINEAR_ACTIVE_STATES=In Progress",
-		"SYMPHONY_LINEAR_TEAM_KEYS=ENG",
+		"SYMPHONY_LINEAR_PROJECT_NAME=Core Platform",
 		"SYMPHONY_LINEAR_API_TOKEN=linear-token",
 		"SYMPHONY_GITHUB_BASE_BRANCH=" + baseBranch,
 		"SYMPHONY_GITHUB_POLL_INTERVAL=30s",
@@ -184,7 +190,7 @@ func multiRepositoryDotenv() string {
 		"SYMPHONY_STORAGE_DSN=/tmp/symphony.db",
 		"SYMPHONY_LINEAR_POLL_INTERVAL=30s",
 		"SYMPHONY_LINEAR_ACTIVE_STATES=In Progress",
-		"SYMPHONY_LINEAR_TEAM_KEYS=ENG,MOBILE",
+		"SYMPHONY_LINEAR_PROJECT_NAME=Core Platform",
 		"SYMPHONY_LINEAR_API_TOKEN=linear-token",
 		"SYMPHONY_GITHUB_BASE_BRANCH=main",
 		"SYMPHONY_GITHUB_POLL_INTERVAL=30s",

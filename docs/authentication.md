@@ -65,7 +65,7 @@ Why this is acceptable for V1:
 
 The Linear adapter should:
 
-- limit queries to configured teams, projects, or labels
+- limit queries to the configured Linear project in v1
 - store only the fields needed for workflow execution
 - avoid treating the Linear token as a general-purpose admin credential
 

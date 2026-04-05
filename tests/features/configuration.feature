@@ -33,3 +33,8 @@ Feature: Runtime configuration
       Given a project root with an invalid Symphony .env file
       When Symphony loads configuration from that project root
       Then configuration loading should fail with "SYMPHONY_GITHUB_LOOKBACK_WINDOW"
+
+    Scenario: Linear project name is required for polling
+      Given a project root with a Symphony .env file missing the Linear project name
+      When Symphony loads configuration from that project root
+      Then configuration loading should fail with "SYMPHONY_LINEAR_PROJECT_NAME"

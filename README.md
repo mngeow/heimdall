@@ -55,7 +55,7 @@ SYMPHONY_STORAGE_DRIVER=sqlite
 SYMPHONY_STORAGE_DSN=/var/lib/symphony/state/symphony.db
 SYMPHONY_LINEAR_POLL_INTERVAL=30s
 SYMPHONY_LINEAR_ACTIVE_STATES=In Progress
-SYMPHONY_LINEAR_TEAM_KEYS=ENG
+SYMPHONY_LINEAR_PROJECT_NAME=Core Platform
 SYMPHONY_LINEAR_API_TOKEN=your-linear-token
 SYMPHONY_GITHUB_BASE_BRANCH=main
 SYMPHONY_GITHUB_POLL_INTERVAL=30s
@@ -74,6 +74,7 @@ SYMPHONY_REPO_PLATFORM_ALLOWED_USERS=your-github-username
 ```
 
 The local `.env` file is ignored by git. `dist.env` stays committed as the supported settings template.
+For v1, Linear polling is scoped to the configured project name in `SYMPHONY_LINEAR_PROJECT_NAME`.
 
 ### Running
 

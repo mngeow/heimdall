@@ -4,7 +4,7 @@ Feature: Proposal creation from activated work item
   So that engineering work can be prepared without manual setup
 
   Background:
-    Given Symphony is configured with a Linear team and GitHub repository
+    Given Symphony is configured with a Linear project and GitHub repository
     And the required local executables are available
 
   Rule: Symphony detects Linear issues entering active state

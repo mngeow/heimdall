@@ -54,7 +54,7 @@ SYMPHONY_STORAGE_DRIVER=sqlite
 SYMPHONY_STORAGE_DSN=/var/lib/symphony/state/symphony.db
 SYMPHONY_LINEAR_POLL_INTERVAL=30s
 SYMPHONY_LINEAR_ACTIVE_STATES=In Progress
-SYMPHONY_LINEAR_TEAM_KEYS=ENG
+SYMPHONY_LINEAR_PROJECT_NAME=Core Platform
 SYMPHONY_LINEAR_API_TOKEN=replace-with-linear-api-token
 SYMPHONY_GITHUB_BASE_BRANCH=main
 SYMPHONY_GITHUB_POLL_INTERVAL=30s
@@ -75,6 +75,7 @@ SYMPHONY_REPO_PLATFORM_ALLOWED_USERS=mngeow
 Notes:
 
 - `dist.env` should be committed as the documented template, while the live `.env` file remains gitignored
+- Linear polling in v1 is scoped to the configured project name in `SYMPHONY_LINEAR_PROJECT_NAME`
 - if only one repo is configured, routing may skip team matching
 - if multiple repos are configured, routing rules should be explicit and validated at startup
 - GitHub polling should be scoped to managed repositories and managed pull requests to control API volume

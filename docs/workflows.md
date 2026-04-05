@@ -7,7 +7,7 @@ Because V1 uses polling, Symphony must detect transitions rather than rely on ev
 Recommended polling strategy:
 
 1. Poll Linear on a short interval such as 30 seconds.
-2. Query recently updated issues for the configured teams or projects.
+2. Query recently updated issues for the configured Linear project.
 3. Compare each issue's current state with the last stored snapshot in SQLite.
 4. When the stored state was not active and the current state is active, emit a normalized transition event.
 5. Record an idempotency key so retries do not create duplicate work.

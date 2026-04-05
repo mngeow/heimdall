@@ -82,7 +82,12 @@ func (s *Store) GetWorkItemByKey(ctx context.Context, provider, key string) (*Wo
 }
 
 func (s *Store) SaveWorkItem(ctx context.Context, item *WorkItem) error {
-	_, err := s.db.ExecContext(ctx,
+	lastSeenUpdatedAt := time.Now()
+	if item.LastSeenUpdatedAt != nil {
+		lastSeenUpdatedAt = item.LastSeenUpdatedAt.UTC()
+	}
+
+	result, err := s.db.ExecContext(ctx,
 		`INSERT INTO work_items (provider, provider_work_item_id, work_item_key, title, state_name, lifecycle_bucket, team_key, last_seen_updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(provider, work_item_key) DO UPDATE SET
@@ -90,10 +95,28 @@ func (s *Store) SaveWorkItem(ctx context.Context, item *WorkItem) error {
 		 state_name = excluded.state_name,
 		 lifecycle_bucket = excluded.lifecycle_bucket,
 		 last_seen_updated_at = excluded.last_seen_updated_at`,
-		item.Provider, item.ProviderWorkItemID, item.WorkItemKey, item.Title, item.StateName, item.LifecycleBucket, item.Team, time.Now(),
+		item.Provider, item.ProviderWorkItemID, item.WorkItemKey, item.Title, item.StateName, item.LifecycleBucket, item.Team, lastSeenUpdatedAt,
 	)
+	if err != nil {
+		return err
+	}
 
-	return err
+	if item.ID == 0 {
+		existing, err := s.GetWorkItemByKey(ctx, item.Provider, item.WorkItemKey)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			item.ID = existing.ID
+		}
+		if item.ID == 0 {
+			if id, _ := result.LastInsertId(); id > 0 {
+				item.ID = id
+			}
+		}
+	}
+
+	return nil
 }
 
 // WorkItemEvent operations
