@@ -14,7 +14,7 @@ Symphony MUST run activation-triggered bootstrap execution through the local `op
 - **AND** it records an operator-visible startup failure that identifies the missing executable
 
 ### Requirement: OpenSpec CLI JSON output controls workflow decisions
-Symphony MUST NOT require OpenSpec CLI JSON output to perform the activation-triggered bootstrap pull request flow.
+The initial activation-triggered bootstrap pull request flow MUST NOT require OpenSpec CLI JSON output, although refine, apply, and archive flows continue to use it.
 
 #### Scenario: Activation bootstrap is prepared for execution
 - **WHEN** Symphony prepares the activation-triggered bootstrap workflow

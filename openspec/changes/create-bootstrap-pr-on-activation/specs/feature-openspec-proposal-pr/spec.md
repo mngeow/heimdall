@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Proposal generation is seeded from work item content
+### Requirement: Activation bootstrap is seeded from work item content
 Symphony MUST extract the activated work item's title and description and MUST use that content as the seed for the activation-triggered bootstrap pull request flow.
 
 #### Scenario: Symphony prepares a bootstrap run from an activated issue
@@ -8,15 +8,15 @@ Symphony MUST extract the activated work item's title and description and MUST u
 - **THEN** it extracts the work item title and description for the bootstrap prompt context
 - **AND** it passes that context into the local OpenCode execution that will create the initial repository change
 
-### Requirement: Proposal generation follows OpenSpec workflow state
-Symphony MUST NOT depend on OpenSpec change creation or OpenSpec artifact generation to complete the activation-triggered bootstrap pull request flow.
+### Requirement: Initial activation bootstrap does not require OpenSpec change creation
+Symphony MUST NOT depend on OpenSpec change creation or OpenSpec artifact generation to complete the initial activation-triggered bootstrap pull request flow.
 
 #### Scenario: Activation bootstrap is prepared for execution
 - **WHEN** Symphony prepares the activation-triggered bootstrap workflow for a routed work item
 - **THEN** it does not require an OpenSpec change to exist before creating the branch and worktree
 - **AND** it proceeds by invoking the local OpenCode bootstrap execution directly from the issue seed data
 
-### Requirement: Branches and change names are deterministic
+### Requirement: Branches are deterministic
 Symphony MUST use deterministic branch naming for activation bootstrap so retries reconcile existing work instead of creating duplicate work branches.
 
 #### Scenario: Symphony creates a branch name for an activated work item
@@ -24,7 +24,7 @@ Symphony MUST use deterministic branch naming for activation bootstrap so retrie
 - **THEN** it names the branch `symphony/ENG-123-add-rate-limiting`
 - **AND** it reuses that same branch identity on later retries for the same work item and repository
 
-### Requirement: Proposal artifacts are committed, pushed, and opened as a pull request
+### Requirement: Bootstrap changes are committed, pushed, and opened as a pull request
 Symphony MUST commit the activation-triggered bootstrap changes to the branch, push the branch to GitHub, and open or reuse a pull request against the configured base branch.
 
 #### Scenario: Symphony completes bootstrap scaffolding for a work item
@@ -32,7 +32,7 @@ Symphony MUST commit the activation-triggered bootstrap changes to the branch, p
 - **THEN** it commits and pushes the bootstrap branch
 - **AND** it opens or reuses a pull request targeting the configured base branch
 
-### Requirement: Proposal pull requests advertise next actions
+### Requirement: Bootstrap pull requests preserve source issue context
 Symphony MUST publish a pull request title and description that reflect the source issue and the generated bootstrap change.
 
 #### Scenario: Bootstrap pull request is opened
