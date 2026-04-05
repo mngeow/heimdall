@@ -44,7 +44,7 @@ type StorageConfig struct {
 type LinearConfig struct {
 	PollInterval time.Duration `env:"POLL_INTERVAL" envDefault:"30s"`
 	ActiveStates []string      `env:"ACTIVE_STATES,required" envSeparator:","`
-	TeamKeys     []string      `env:"TEAM_KEYS,required" envSeparator:","`
+	ProjectName  string        `env:"PROJECT_NAME,required,notEmpty"`
 	APIToken     string        `env:"API_TOKEN,required,notEmpty"`
 }
 
@@ -116,7 +116,7 @@ func LoadFromDir(projectRoot string) (*Config, error) {
 		Linear: LinearConfig{
 			PollInterval: root.Linear.PollInterval,
 			ActiveStates: trimNonEmpty(root.Linear.ActiveStates),
-			TeamKeys:     trimNonEmpty(root.Linear.TeamKeys),
+			ProjectName:  strings.TrimSpace(root.Linear.ProjectName),
 			APIToken:     strings.TrimSpace(root.Linear.APIToken),
 		},
 		GitHub: GitHubConfig{
@@ -150,8 +150,8 @@ func (c *Config) Validate() error {
 	if len(c.Linear.ActiveStates) == 0 {
 		return fmt.Errorf("SYMPHONY_LINEAR_ACTIVE_STATES must include at least one state")
 	}
-	if len(c.Linear.TeamKeys) == 0 {
-		return fmt.Errorf("SYMPHONY_LINEAR_TEAM_KEYS must include at least one team key")
+	if c.Linear.ProjectName == "" {
+		return fmt.Errorf("SYMPHONY_LINEAR_PROJECT_NAME must not be empty")
 	}
 	if c.GitHub.PrivateKey == "" {
 		return fmt.Errorf("either SYMPHONY_GITHUB_PRIVATE_KEY or SYMPHONY_GITHUB_PRIVATE_KEY_FILE must be set")

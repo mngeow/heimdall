@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
+	"github.com/mngeow/symphony/internal/board/linear"
 	"github.com/mngeow/symphony/internal/config"
 	"github.com/mngeow/symphony/internal/slashcmd"
 	"github.com/mngeow/symphony/internal/store"
@@ -42,6 +43,13 @@ type testContext struct {
 	rejectionReason  string
 	projectRoot      string
 	envSnapshot      map[string]envState
+	linearPollResult *linear.PollResult
+	linearPollErr    error
+	linearActivated  []linear.WorkItem
+	linearProvider   *linear.Provider
+	linearRequests   []string
+	linearCheckpoint string
+	linearCleanup    func()
 }
 
 type envState struct {
@@ -98,12 +106,16 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		if tc.projectRoot != "" {
 			_ = os.RemoveAll(tc.projectRoot)
 		}
+		if tc.linearCleanup != nil {
+			tc.linearCleanup()
+		}
 		restoreSymphonyEnv(tc.envSnapshot)
 		return ctx, nil
 	})
 
 	// Background steps
 	sc.Step(`^Symphony is configured with a Linear team and GitHub repository$`, symphonyIsConfigured)
+	sc.Step(`^Symphony is configured with a Linear project and GitHub repository$`, symphonyIsConfigured)
 	sc.Step(`^Symphony is configured with GitHub polling$`, symphonyIsConfigured)
 	sc.Step(`^the required local executables are available$`, executablesAreAvailable)
 	sc.Step(`^a Symphony-managed pull request exists$`, symphonyManagedPRExists)
@@ -170,6 +182,7 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^tokens should not be stored in SQLite$`, tokensNotInSQLite)
 
 	registerConfigurationSteps(sc)
+	registerLinearPollingSteps(sc)
 }
 
 // Helper to get testContext from context
@@ -182,7 +195,9 @@ func symphonyIsConfigured(ctx context.Context) error {
 	tc := getTC(ctx)
 	tc.config = &config.Config{
 		Linear: config.LinearConfig{
-			TeamKeys:     []string{"ENG"},
+			ProjectName:  "Core Platform",
+			APIToken:     "linear-token",
+			PollInterval: 30 * time.Second,
 			ActiveStates: []string{"In Progress"},
 		},
 		GitHub: config.GitHubConfig{

@@ -182,7 +182,7 @@ erDiagram
 
 ### `provider_cursors`
 
-Stores the current polling position for each provider scope, such as a Linear team or a GitHub repository poll scope.
+Stores the current polling position for each provider scope, such as a configured Linear project or a GitHub repository poll scope.
 
 ### `repositories`
 

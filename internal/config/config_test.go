@@ -109,6 +109,20 @@ func TestLoadFromDirValidatesLookbackWindow(t *testing.T) {
 	}
 }
 
+func TestLoadFromDirRequiresLinearProjectName(t *testing.T) {
+	clearSymphonyEnv(t)
+	projectRoot := t.TempDir()
+	writeTestFile(t, filepath.Join(projectRoot, ".env"), strings.ReplaceAll(validDotenv("main"), "SYMPHONY_LINEAR_PROJECT_NAME=Core Platform\n", ""))
+
+	_, err := LoadFromDir(projectRoot)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "SYMPHONY_LINEAR_PROJECT_NAME") {
+		t.Fatalf("expected linear project name validation error, got %v", err)
+	}
+}
+
 func clearSymphonyEnv(t *testing.T) {
 	t.Helper()
 
@@ -153,7 +167,7 @@ func validEnvMap(baseBranch string) map[string]string {
 		"SYMPHONY_STORAGE_DSN":                     "/tmp/symphony.db",
 		"SYMPHONY_LINEAR_POLL_INTERVAL":            "30s",
 		"SYMPHONY_LINEAR_ACTIVE_STATES":            "In Progress",
-		"SYMPHONY_LINEAR_TEAM_KEYS":                "ENG",
+		"SYMPHONY_LINEAR_PROJECT_NAME":             "Core Platform",
 		"SYMPHONY_LINEAR_API_TOKEN":                "linear-token",
 		"SYMPHONY_GITHUB_BASE_BRANCH":              baseBranch,
 		"SYMPHONY_GITHUB_POLL_INTERVAL":            "30s",

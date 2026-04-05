@@ -1,6 +1,4 @@
-# Service: Board Provider
-
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Board providers emit normalized work item models
 The board integration layer MUST normalize provider-specific issue data into provider-neutral work item and work item event models for the core workflow engine, and the Linear adapter MUST source that normalized model from the Linear GraphQL issue fields required for polling.
@@ -55,11 +53,3 @@ Symphony MUST treat Linear GraphQL errors, authentication failures, and rate lim
 - **WHEN** the Linear API returns a GraphQL response that includes an `errors` array for the poll query
 - **THEN** Symphony treats the poll cycle as failed instead of trusting partial data
 - **AND** it does not create new activation events from that partial response
-
-### Requirement: Provider-specific semantics remain outside the core workflow engine
-The board-provider service MUST keep provider-specific state names and transition semantics inside provider adapters so additional board systems can be added without rewriting the core workflow engine.
-
-#### Scenario: A future provider defines a different active state name
-- **WHEN** a provider uses a state name other than `In Progress` to represent active work
-- **THEN** the provider adapter maps that provider-specific state into the normalized `active` lifecycle bucket
-- **AND** the core workflow engine continues to consume normalized transitions without provider-specific branching logic
