@@ -40,6 +40,13 @@ Feature: Bootstrap pull request creation from activated work item
       And Symphony should create or reuse a bootstrap pull request to main
       And Symphony should include the issue description in the bootstrap pull request body
 
+    Scenario: Bootstrap PR is labeled for Symphony monitoring
+      Given a Linear issue enters active state
+      And the repository configures PR monitor label "symphony-monitored"
+      When Symphony generates the activation bootstrap pull request
+      Then Symphony should create or reuse repository label "symphony-monitored"
+      And Symphony should apply the monitor label "symphony-monitored" to the bootstrap pull request
+
     Scenario: Bootstrap execution fails when no file changes are produced
       Given a Linear issue enters active state
       And the bootstrap execution produces no file changes

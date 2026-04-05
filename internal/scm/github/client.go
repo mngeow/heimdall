@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -18,6 +19,11 @@ import (
 )
 
 var defaultGitHubAPIBaseURL = mustParseURL("https://api.github.com/")
+
+const (
+	defaultPRMonitorLabelColor       = "0e8a16"
+	defaultPRMonitorLabelDescription = "Symphony monitors PR events on this pull request."
+)
 
 // Client wraps GitHub App authentication and API operations.
 type Client struct {
@@ -149,6 +155,50 @@ func (c *Client) CreatePullRequest(ctx context.Context, owner, repo, title, head
 	}
 
 	return pullRequest, nil
+}
+
+// EnsurePRMonitorLabel creates the configured PR monitor label when it is missing.
+func (c *Client) EnsurePRMonitorLabel(ctx context.Context, owner, repo, labelName string) error {
+	apiClient, err := c.newAPIClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = apiClient.Issues.GetLabel(ctx, owner, repo, labelName)
+	if err == nil {
+		return nil
+	}
+
+	var responseErr *gh.ErrorResponse
+	if !errors.As(err, &responseErr) || responseErr.Response == nil || responseErr.Response.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("failed to look up label %q in %s/%s: %w", labelName, owner, repo, err)
+	}
+
+	_, _, err = apiClient.Issues.CreateLabel(ctx, owner, repo, &gh.Label{
+		Name:        gh.String(labelName),
+		Color:       gh.String(defaultPRMonitorLabelColor),
+		Description: gh.String(defaultPRMonitorLabelDescription),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create label %q in %s/%s: %w", labelName, owner, repo, err)
+	}
+
+	return nil
+}
+
+// AddPRMonitorLabel adds the configured monitor label to a pull request without replacing unrelated labels.
+func (c *Client) AddPRMonitorLabel(ctx context.Context, owner, repo string, number int, labelName string) error {
+	apiClient, err := c.newAPIClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = apiClient.Issues.AddLabelsToIssue(ctx, owner, repo, number, []string{labelName})
+	if err != nil {
+		return fmt.Errorf("failed to add label %q to %s/%s#%d: %w", labelName, owner, repo, number, err)
+	}
+
+	return nil
 }
 
 // FindOpenPullRequestByHead returns the first open pull request that matches the head/base branch pair.

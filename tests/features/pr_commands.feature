@@ -64,3 +64,12 @@ Feature: Pull request command handling
       Given a command comment exists
       When Symphony polls an edited version of the same comment
       Then the edit should not trigger a new command execution
+
+  Rule: Label-scoped polling ignores unlabeled pull requests
+
+    Scenario: Unlabeled Symphony pull request is ignored when monitor label is configured
+      Given a Symphony-managed pull request exists
+      And the repository configures PR monitor label "symphony-monitored"
+      When the user comments "/symphony status"
+      And Symphony polls GitHub
+      Then Symphony should ignore the pull request because it is missing monitor label

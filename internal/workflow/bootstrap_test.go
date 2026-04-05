@@ -53,6 +53,8 @@ type fakeBootstrapGitHubClient struct {
 	createdPR      *gh.PullRequest
 	createCalls    int
 	findCalls      int
+	ensureLabel    []string
+	addLabelCalls  []int
 	installationOK bool
 }
 
@@ -73,6 +75,16 @@ func (f *fakeBootstrapGitHubClient) CreatePullRequest(context.Context, string, s
 	return f.createdPR, nil
 }
 
+func (f *fakeBootstrapGitHubClient) EnsurePRMonitorLabel(_ context.Context, _, _, label string) error {
+	f.ensureLabel = append(f.ensureLabel, label)
+	return nil
+}
+
+func (f *fakeBootstrapGitHubClient) AddPRMonitorLabel(_ context.Context, _, _ string, number int, _ string) error {
+	f.addLabelCalls = append(f.addLabelCalls, number)
+	return nil
+}
+
 type fakeBootstrapRunner struct {
 	request exec.BootstrapRequest
 	result  *exec.BootstrapResult
@@ -91,6 +103,10 @@ func TestBootstrapWorkflowExecuteSuccessReusesExistingPullRequest(t *testing.T) 
 	ctx := context.Background()
 	runtimeStore := testWorkflowStore(t)
 	workItem, repository, run := seedBootstrapRun(t, ctx, runtimeStore)
+	repository.PRMonitorLabel = "symphony-monitored"
+	if err := runtimeStore.SaveRepository(ctx, repository); err != nil {
+		t.Fatalf("SaveRepository() error = %v", err)
+	}
 
 	repoMgr := &fakeBootstrapRepoManager{hasChanges: true, commitSHA: "abc123"}
 	githubClient := &fakeBootstrapGitHubClient{
@@ -135,6 +151,12 @@ func TestBootstrapWorkflowExecuteSuccessReusesExistingPullRequest(t *testing.T) 
 	}
 	if githubClient.createCalls != 0 {
 		t.Fatalf("expected no PR create calls, got %d", githubClient.createCalls)
+	}
+	if len(githubClient.ensureLabel) != 1 || githubClient.ensureLabel[0] != "symphony-monitored" {
+		t.Fatalf("expected PR monitor label reconciliation, got %#v", githubClient.ensureLabel)
+	}
+	if len(githubClient.addLabelCalls) != 1 || githubClient.addLabelCalls[0] != 42 {
+		t.Fatalf("expected PR monitor label applied to PR #42, got %#v", githubClient.addLabelCalls)
 	}
 	if bootstrapRunner.request.IssueKey != workItem.WorkItemKey || bootstrapRunner.request.IssueTitle != workItem.Title {
 		t.Fatalf("expected bootstrap request to include issue seed, got %#v", bootstrapRunner.request)

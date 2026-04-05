@@ -110,6 +110,36 @@ func TestStore(t *testing.T) {
 			t.Error("expected repository, got nil")
 		} else if retrieved.Owner != "test" {
 			t.Errorf("expected owner 'test', got %s", retrieved.Owner)
+		} else if retrieved.PRMonitorLabel != "" {
+			t.Errorf("expected empty PR monitor label by default, got %q", retrieved.PRMonitorLabel)
+		}
+	})
+
+	t.Run("RepositoryPRMonitorLabel", func(t *testing.T) {
+		repo := &Repository{
+			Provider:        "github",
+			RepoRef:         "github.com/test/monitored",
+			Owner:           "test",
+			Name:            "monitored",
+			DefaultBranch:   "main",
+			BranchPrefix:    "symphony",
+			PRMonitorLabel:  "symphony-monitored",
+			LocalMirrorPath: "/var/lib/symphony/repos/github.com/test/monitored.git",
+			IsActive:        true,
+		}
+
+		if err := store.SaveRepository(ctx, repo); err != nil {
+			t.Errorf("failed to save repository: %v", err)
+		}
+
+		retrieved, err := store.GetRepositoryByRef(ctx, repo.RepoRef)
+		if err != nil {
+			t.Errorf("failed to get repository: %v", err)
+		}
+		if retrieved == nil {
+			t.Error("expected repository, got nil")
+		} else if retrieved.PRMonitorLabel != "symphony-monitored" {
+			t.Errorf("expected PR monitor label to round-trip, got %q", retrieved.PRMonitorLabel)
 		}
 	})
 }

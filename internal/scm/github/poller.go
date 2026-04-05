@@ -103,36 +103,10 @@ func (p *Poller) pollRepository(ctx context.Context, repository store.Repository
 	}
 
 	managedByNumber := make(map[int]*store.PullRequest, len(managedPRs))
+	eligibleNumbers := make(map[int]struct{}, len(managedPRs))
 	for i := range managedPRs {
 		pr := managedPRs[i]
 		managedByNumber[pr.Number] = &pr
-	}
-
-	comments, err := p.api.ListIssueCommentsSince(ctx, owner, repoName, since)
-	if err != nil {
-		return nil, time.Time{}, fmt.Errorf("failed to poll issue comments for %s: %w", repository.RepoRef, err)
-	}
-
-	for _, comment := range comments {
-		issueNumber, ok := pullRequestNumberFromComment(comment)
-		if !ok {
-			continue
-		}
-
-		managedPR := managedByNumber[issueNumber]
-		if managedPR == nil {
-			continue
-		}
-
-		result.Commands = append(result.Commands, DiscoveredCommand{
-			RepoRef:       repository.RepoRef,
-			PullRequest:   managedPR,
-			CommentNodeID: commentIdentity(comment),
-			ActorLogin:    comment.GetUser().GetLogin(),
-			Body:          comment.GetBody(),
-			CreatedAt:     comment.GetCreatedAt().Time,
-			UpdatedAt:     comment.GetUpdatedAt().Time,
-		})
 	}
 
 	for _, managedPR := range managedPRs {
@@ -140,6 +114,10 @@ func (p *Poller) pollRepository(ctx context.Context, repository store.Repository
 		if err != nil {
 			return nil, time.Time{}, fmt.Errorf("failed to reconcile pull request %s#%d: %w", repository.RepoRef, managedPR.Number, err)
 		}
+		if repository.PRMonitorLabel != "" && !pullRequestHasLabel(remotePR, repository.PRMonitorLabel) {
+			continue
+		}
+		eligibleNumbers[managedPR.Number] = struct{}{}
 
 		updatedPR := managedPR
 		updatedPR.ProviderPRNodeID = remotePR.GetNodeID()
@@ -155,6 +133,38 @@ func (p *Poller) pollRepository(ctx context.Context, repository store.Repository
 
 		if managedPR.ProviderPRNodeID != updatedPR.ProviderPRNodeID || managedPR.Title != updatedPR.Title || managedPR.BaseBranch != updatedPR.BaseBranch || managedPR.HeadBranch != updatedPR.HeadBranch || managedPR.State != updatedPR.State || managedPR.URL != updatedPR.URL {
 			result.Reconciled = append(result.Reconciled, updatedPR)
+		}
+	}
+
+	if len(eligibleNumbers) > 0 {
+		comments, err := p.api.ListIssueCommentsSince(ctx, owner, repoName, since)
+		if err != nil {
+			return nil, time.Time{}, fmt.Errorf("failed to poll issue comments for %s: %w", repository.RepoRef, err)
+		}
+
+		for _, comment := range comments {
+			issueNumber, ok := pullRequestNumberFromComment(comment)
+			if !ok {
+				continue
+			}
+			if _, ok := eligibleNumbers[issueNumber]; !ok {
+				continue
+			}
+
+			managedPR := managedByNumber[issueNumber]
+			if managedPR == nil {
+				continue
+			}
+
+			result.Commands = append(result.Commands, DiscoveredCommand{
+				RepoRef:       repository.RepoRef,
+				PullRequest:   managedPR,
+				CommentNodeID: commentIdentity(comment),
+				ActorLogin:    comment.GetUser().GetLogin(),
+				Body:          comment.GetBody(),
+				CreatedAt:     comment.GetCreatedAt().Time,
+				UpdatedAt:     comment.GetUpdatedAt().Time,
+			})
 		}
 	}
 
@@ -196,4 +206,16 @@ func pullRequestState(pr *gh.PullRequest) string {
 		return "merged"
 	}
 	return pr.GetState()
+}
+
+func pullRequestHasLabel(pr *gh.PullRequest, label string) bool {
+	if strings.TrimSpace(label) == "" {
+		return true
+	}
+	for _, existing := range pr.Labels {
+		if strings.EqualFold(existing.GetName(), label) {
+			return true
+		}
+	}
+	return false
 }

@@ -23,6 +23,7 @@ func registerConfigurationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^configuration loading should succeed$`, configurationLoadingShouldSucceed)
 	sc.Step(`^configuration loading should fail with "([^"]*)"$`, configurationLoadingShouldFailWith)
 	sc.Step(`^the loaded configuration should include repository "([^"]*)"$`, loadedConfigurationShouldIncludeRepository)
+	sc.Step(`^the loaded repository "([^"]*)" should use PR monitor label "([^"]*)"$`, loadedRepositoryShouldUsePRMonitorLabel)
 	sc.Step(`^repository routing for team "([^"]*)" should resolve to "([^"]*)"$`, repositoryRoutingShouldResolveTo)
 	sc.Step(`^the loaded GitHub base branch should be "([^"]*)"$`, loadedGitHubBaseBranchShouldBe)
 }
@@ -116,6 +117,20 @@ func loadedConfigurationShouldIncludeRepository(ctx context.Context, repoRef str
 		if repo.Name == repoRef {
 			return nil
 		}
+	}
+	return fmt.Errorf("expected repository %q in config, got %#v", repoRef, tc.config.Repos)
+}
+
+func loadedRepositoryShouldUsePRMonitorLabel(ctx context.Context, repoRef, label string) error {
+	tc := getTC(ctx)
+	for _, repo := range tc.config.Repos {
+		if repo.Name != repoRef {
+			continue
+		}
+		if repo.PRMonitorLabel != label {
+			return fmt.Errorf("expected repository %q to use PR monitor label %q, got %q", repoRef, label, repo.PRMonitorLabel)
+		}
+		return nil
 	}
 	return fmt.Errorf("expected repository %q in config, got %#v", repoRef, tc.config.Repos)
 }

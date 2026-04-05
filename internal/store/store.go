@@ -54,6 +54,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			name TEXT NOT NULL,
 			default_branch TEXT NOT NULL,
 			branch_prefix TEXT NOT NULL DEFAULT 'symphony',
+			pr_monitor_label TEXT NOT NULL DEFAULT '',
 			local_mirror_path TEXT NOT NULL,
 			is_active BOOLEAN NOT NULL DEFAULT 1
 		);`,
@@ -205,6 +206,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`ALTER TABLE work_items ADD COLUMN project_name TEXT`,
 		`ALTER TABLE work_items ADD COLUMN labels_json TEXT NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE workflow_runs ADD COLUMN status_reason TEXT`,
+		`ALTER TABLE repositories ADD COLUMN pr_monitor_label TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, migration := range columnMigrations {
 		if err := s.execOptionalMigration(ctx, migration); err != nil {
