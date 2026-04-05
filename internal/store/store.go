@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -61,9 +63,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 			provider_work_item_id TEXT NOT NULL,
 			work_item_key TEXT NOT NULL,
 			title TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
 			state_name TEXT NOT NULL,
 			lifecycle_bucket TEXT NOT NULL,
+			project_name TEXT,
 			team_key TEXT,
+			labels_json TEXT NOT NULL DEFAULT '[]',
 			last_seen_updated_at DATETIME,
 			UNIQUE(provider, provider_work_item_id),
 			UNIQUE(provider, work_item_key)
@@ -131,6 +136,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			trigger_event_id INTEGER,
 			run_type TEXT NOT NULL,
 			status TEXT NOT NULL,
+			status_reason TEXT,
 			change_name TEXT NOT NULL,
 			branch_name TEXT NOT NULL,
 			worktree_path TEXT NOT NULL,
@@ -194,7 +200,39 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 	}
 
+	columnMigrations := []string{
+		`ALTER TABLE work_items ADD COLUMN description TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE work_items ADD COLUMN project_name TEXT`,
+		`ALTER TABLE work_items ADD COLUMN labels_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE workflow_runs ADD COLUMN status_reason TEXT`,
+	}
+	for _, migration := range columnMigrations {
+		if err := s.execOptionalMigration(ctx, migration); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+func (s *Store) execOptionalMigration(ctx context.Context, query string) error {
+	if _, err := s.db.ExecContext(ctx, query); err != nil {
+		if isDuplicateColumnError(err) {
+			return nil
+		}
+		return fmt.Errorf("migration failed: %w", err)
+	}
+	return nil
+}
+
+func isDuplicateColumnError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "duplicate column name")
 }
 
 // ProviderCursor operations

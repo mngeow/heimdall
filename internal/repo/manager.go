@@ -2,12 +2,15 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
+
+var ErrNoChanges = errors.New("no repository changes to commit")
 
 // Manager handles git repository operations
 type Manager struct {
@@ -19,37 +22,35 @@ func NewManager(basePath string) *Manager {
 	return &Manager{basePath: basePath}
 }
 
-// EnsureBareMirror ensures a bare mirror exists for a repository
-func (m *Manager) EnsureBareMirror(ctx context.Context, owner, name, token string) (string, error) {
-	mirrorPath := filepath.Join(m.basePath, "repos", "github.com", fmt.Sprintf("%s/%s.git", owner, name))
-
+// EnsureBareMirror ensures a bare mirror exists for a repository at the configured path.
+func (m *Manager) EnsureBareMirror(ctx context.Context, mirrorPath, owner, name, token string) error {
 	// Check if mirror exists
 	if _, err := os.Stat(mirrorPath); err == nil {
 		// Mirror exists, fetch updates
-		cmd := exec.CommandContext(ctx, "git", "-C", mirrorPath, "fetch", "--prune", "origin")
+		cmd := exec.CommandContext(ctx, "git", "-C", mirrorPath, "fetch", "--prune", authenticatedRepoURL(owner, name, token))
 		if output, err := cmd.CombinedOutput(); err != nil {
-			return "", fmt.Errorf("failed to fetch mirror: %w (output: %s)", err, string(output))
+			return fmt.Errorf("failed to fetch mirror: %w (output: %s)", err, string(output))
 		}
-		return mirrorPath, nil
+		return nil
 	}
 
 	// Create mirror directory
 	if err := os.MkdirAll(filepath.Dir(mirrorPath), 0755); err != nil {
-		return "", fmt.Errorf("failed to create mirror directory: %w", err)
+		return fmt.Errorf("failed to create mirror directory: %w", err)
 	}
 
 	// Clone mirror
-	repoURL := fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", token, owner, name)
+	repoURL := authenticatedRepoURL(owner, name, token)
 	cmd := exec.CommandContext(ctx, "git", "clone", "--mirror", repoURL, mirrorPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("failed to clone mirror: %w (output: %s)", err, string(output))
+		return fmt.Errorf("failed to clone mirror: %w (output: %s)", err, string(output))
 	}
 
-	return mirrorPath, nil
+	return nil
 }
 
-// CreateWorktree creates a new worktree for a workflow run
-func (m *Manager) CreateWorktree(ctx context.Context, mirrorPath, branchName, worktreePath string) error {
+// CreateWorktree creates a new worktree for a workflow run.
+func (m *Manager) CreateWorktree(ctx context.Context, mirrorPath, baseBranch, branchName, worktreePath string) error {
 	// Ensure worktree directory exists
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0755); err != nil {
 		return fmt.Errorf("failed to create worktree directory: %w", err)
@@ -63,7 +64,8 @@ func (m *Manager) CreateWorktree(ctx context.Context, mirrorPath, branchName, wo
 	}
 
 	// Create worktree
-	cmd := exec.CommandContext(ctx, "git", "-C", mirrorPath, "worktree", "add", "-B", branchName, worktreePath)
+	baseRef := fmt.Sprintf("refs/heads/%s", strings.TrimSpace(baseBranch))
+	cmd := exec.CommandContext(ctx, "git", "-C", mirrorPath, "worktree", "add", "-B", branchName, worktreePath, baseRef)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create worktree: %w (output: %s)", err, string(output))
 	}
@@ -71,44 +73,42 @@ func (m *Manager) CreateWorktree(ctx context.Context, mirrorPath, branchName, wo
 	return nil
 }
 
-// CommitAndPush commits changes and pushes to the remote
-func (m *Manager) CommitAndPush(ctx context.Context, worktreePath, message string) error {
-	// Configure git user
-	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "config", "user.email", "symphony@localhost")
+// HasChanges reports whether the worktree contains repository changes.
+func (m *Manager) HasChanges(ctx context.Context, worktreePath string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "status", "--porcelain")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("failed to inspect worktree changes: %w (output: %s)", err, string(output))
+	}
+	return strings.TrimSpace(string(output)) != "", nil
+}
+
+// CommitAll stages all changes, validates a non-empty diff, and creates a commit.
+func (m *Manager) CommitAll(ctx context.Context, worktreePath, message string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "add", "-A")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to configure git email: %w (output: %s)", err, string(output))
+		return "", fmt.Errorf("failed to stage changes: %w (output: %s)", err, string(output))
 	}
 
-	cmd = exec.CommandContext(ctx, "git", "-C", worktreePath, "config", "user.name", "Symphony")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to configure git name: %w (output: %s)", err, string(output))
-	}
-
-	// Stage all changes
-	cmd = exec.CommandContext(ctx, "git", "-C", worktreePath, "add", "-A")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to stage changes: %w (output: %s)", err, string(output))
-	}
-
-	// Check if there are changes to commit
 	cmd = exec.CommandContext(ctx, "git", "-C", worktreePath, "diff", "--cached", "--quiet")
 	if err := cmd.Run(); err == nil {
-		// No changes to commit
-		return nil
+		return "", ErrNoChanges
 	}
 
-	// Commit
-	cmd = exec.CommandContext(ctx, "git", "-C", worktreePath, "commit", "-m", message)
+	cmd = exec.CommandContext(ctx, "git", "-C", worktreePath, "-c", "user.name=Symphony", "-c", "user.email=symphony@localhost", "commit", "-m", message)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to commit: %w (output: %s)", err, string(output))
+		return "", fmt.Errorf("failed to commit: %w (output: %s)", err, string(output))
 	}
 
-	// Push
-	cmd = exec.CommandContext(ctx, "git", "-C", worktreePath, "push", "origin", "HEAD")
+	return m.GetHeadSHA(ctx, worktreePath)
+}
+
+// PushBranch pushes the branch to GitHub by using an installation token without mutating git config.
+func (m *Manager) PushBranch(ctx context.Context, worktreePath, owner, name, branchName, token string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "push", authenticatedRepoURL(owner, name, token), "HEAD:refs/heads/"+branchName)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to push: %w (output: %s)", err, string(output))
 	}
-
 	return nil
 }
 
@@ -130,4 +130,8 @@ func (m *Manager) GetHeadSHA(ctx context.Context, worktreePath string) (string, 
 		return "", fmt.Errorf("failed to get HEAD: %w", err)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func authenticatedRepoURL(owner, name, token string) string {
+	return fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", token, owner, name)
 }

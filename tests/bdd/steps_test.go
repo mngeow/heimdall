@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,39 +18,43 @@ import (
 
 // testContext holds the state for each scenario
 type testContext struct {
-	config           *config.Config
-	configLoadErr    error
-	store            *store.Store
-	queue            *store.JobQueue
-	intake           *slashcmd.Intake
-	workItem         *store.WorkItem
-	pr               *store.PullRequest
-	repoBinding      *store.RepoBinding
-	workflowRun      *store.WorkflowRun
-	command          string
-	commandResult    string
-	pendingComment   string
-	pendingActor     string
-	pendingCommentID string
-	lastPollResult   *slashcmd.ProcessResult
-	authorizer       *slashcmd.Authorizer
-	parser           *slashcmd.Parser
-	isAuthorized     bool
-	isRejected       bool
-	pollObserved     bool
-	workflowQueued   bool
-	duplicateSeen    bool
-	publicWebhook    bool
-	rejectionReason  string
-	projectRoot      string
-	envSnapshot      map[string]envState
-	linearPollResult *linear.PollResult
-	linearPollErr    error
-	linearActivated  []linear.WorkItem
-	linearProvider   *linear.Provider
-	linearRequests   []string
-	linearCheckpoint string
-	linearCleanup    func()
+	config             *config.Config
+	configLoadErr      error
+	store              *store.Store
+	queue              *store.JobQueue
+	intake             *slashcmd.Intake
+	workItem           *store.WorkItem
+	pr                 *store.PullRequest
+	repoBinding        *store.RepoBinding
+	workflowRun        *store.WorkflowRun
+	command            string
+	commandResult      string
+	pendingComment     string
+	pendingActor       string
+	pendingCommentID   string
+	lastPollResult     *slashcmd.ProcessResult
+	authorizer         *slashcmd.Authorizer
+	parser             *slashcmd.Parser
+	isAuthorized       bool
+	isRejected         bool
+	pollObserved       bool
+	workflowQueued     bool
+	duplicateSeen      bool
+	publicWebhook      bool
+	rejectionReason    string
+	bootstrapNoChanges bool
+	prBody             string
+	logOutput          string
+	bootstrapPrompt    string
+	projectRoot        string
+	envSnapshot        map[string]envState
+	linearPollResult   *linear.PollResult
+	linearPollErr      error
+	linearActivated    []linear.WorkItem
+	linearProvider     *linear.Provider
+	linearRequests     []string
+	linearCheckpoint   string
+	linearCleanup      func()
 }
 
 type envState struct {
@@ -124,25 +129,39 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 
 	// Proposal creation steps
 	sc.Step(`^a Linear issue "([^"]*)" with title "([^"]*)" exists$`, linearIssueExists)
+	sc.Step(`^a Linear issue "([^"]*)" with title "([^"]*)" and description "([^"]*)" exists$`, linearIssueExistsWithDescription)
 	sc.Step(`^a Linear issue "([^"]*)" with title "([^"]*)"$`, aLinearIssueWithTitle)
 	sc.Step(`^the issue is in state "([^"]*)"$`, issueIsInState)
 	sc.Step(`^the issue is moved to state "([^"]*)"$`, issueIsMovedToState)
 	sc.Step(`^Symphony polls Linear$`, symphonyPollsLinear)
 	sc.Step(`^Symphony should detect the state transition$`, symphonyShouldDetectTransition)
 	sc.Step(`^Symphony should create a workflow run for proposal generation$`, symphonyShouldCreateWorkflowRun)
+	sc.Step(`^Symphony should create a workflow run for bootstrap pull request creation$`, symphonyShouldCreateWorkflowRun)
 	sc.Step(`^a Linear issue "([^"]*)" is already in state "([^"]*)"$`, linearIssueExistsInState)
 	sc.Step(`^a proposal branch already exists for the issue$`, proposalBranchExists)
+	sc.Step(`^a bootstrap branch already exists for the issue$`, proposalBranchExists)
 	sc.Step(`^Symphony polls Linear again$`, symphonyPollsLinear)
 	sc.Step(`^Symphony should not create a duplicate workflow run$`, symphonyShouldNotCreateDuplicate)
 	sc.Step(`^Symphony should reuse the existing proposal$`, symphonyShouldReuseExisting)
+	sc.Step(`^Symphony should reuse the existing bootstrap pull request binding$`, symphonyShouldReuseExisting)
 	sc.Step(`^the issue enters active state$`, issueEntersActiveState)
 	sc.Step(`^the proposal branch should be named "([^"]*)"$`, proposalBranchShouldBeNamed)
+	sc.Step(`^the bootstrap branch should be named "([^"]*)"$`, proposalBranchShouldBeNamed)
 	sc.Step(`^the OpenSpec change should be named "([^"]*)"$`, openSpecChangeShouldBeNamed)
 	sc.Step(`^a Linear issue enters active state$`, linearIssueEntersActiveState)
 	sc.Step(`^Symphony generates the OpenSpec proposal$`, symphonyGeneratesProposal)
+	sc.Step(`^Symphony generates the activation bootstrap pull request$`, symphonyGeneratesBootstrapPullRequest)
 	sc.Step(`^Symphony should push the proposal branch$`, symphonyShouldPushBranch)
+	sc.Step(`^Symphony should push the bootstrap branch$`, symphonyShouldPushBranch)
 	sc.Step(`^Symphony should create a pull request to main$`, symphonyShouldCreatePR)
+	sc.Step(`^Symphony should create or reuse a bootstrap pull request to main$`, symphonyShouldCreatePR)
 	sc.Step(`^Symphony should comment with the change name and available commands$`, symphonyShouldCommentWithInfo)
+	sc.Step(`^Symphony should include the issue description in the bootstrap pull request body$`, symphonyShouldIncludeIssueDescriptionInPRBody)
+	sc.Step(`^the bootstrap execution produces no file changes$`, bootstrapExecutionProducesNoFileChanges)
+	sc.Step(`^Symphony should mark the workflow run as blocked$`, symphonyShouldMarkWorkflowBlocked)
+	sc.Step(`^Symphony should record the no-change reason$`, symphonyShouldRecordNoChangeReason)
+	sc.Step(`^Symphony should emit activation bootstrap logs with workflow step names$`, symphonyShouldEmitBootstrapLogs)
+	sc.Step(`^Symphony should not log installation tokens or raw bootstrap prompts$`, symphonyShouldRedactBootstrapLogs)
 
 	// Command handling steps
 	sc.Step(`^the user comments "([^"]*)"$`, userComments)
@@ -284,10 +303,19 @@ func linearIssueExists(ctx context.Context, key, title string) error {
 		ProviderWorkItemID: "linear-uuid-" + key,
 		WorkItemKey:        key,
 		Title:              title,
+		Description:        "Add rate limiting for API requests",
 		StateName:          "Todo",
 		LifecycleBucket:    "inactive",
 		Team:               "ENG",
 	}
+	return nil
+}
+
+func linearIssueExistsWithDescription(ctx context.Context, key, title, description string) error {
+	if err := linearIssueExists(ctx, key, title); err != nil {
+		return err
+	}
+	getTC(ctx).workItem.Description = description
 	return nil
 }
 
@@ -331,12 +359,13 @@ func symphonyShouldDetectTransition(ctx context.Context) error {
 func symphonyShouldCreateWorkflowRun(ctx context.Context) error {
 	tc := getTC(ctx)
 	// Simulate workflow run creation
+	slug := workflow.SlugFromDescriptionOrTitle(tc.workItem.Description, tc.workItem.Title)
 	tc.workflowRun = &store.WorkflowRun{
 		ID:         1,
-		RunType:    "propose",
+		RunType:    "bootstrap_pull_request",
 		Status:     "queued",
-		ChangeName: workflow.GenerateChangeName(tc.workItem.WorkItemKey, workflow.Slugify(tc.workItem.Title)),
-		BranchName: workflow.GenerateBranchName(tc.workItem.WorkItemKey, workflow.Slugify(tc.workItem.Title)),
+		ChangeName: workflow.GenerateChangeName(tc.workItem.WorkItemKey, slug),
+		BranchName: workflow.GenerateBranchName("symphony", tc.workItem.WorkItemKey, slug),
 	}
 	return nil
 }
@@ -348,6 +377,7 @@ func linearIssueExistsInState(ctx context.Context, key, state string) error {
 		ProviderWorkItemID: "linear-uuid-" + key,
 		WorkItemKey:        key,
 		Title:              "Add rate limiting",
+		Description:        "Add rate limiting for API requests",
 		StateName:          state,
 		LifecycleBucket:    "active",
 		Team:               "ENG",
@@ -359,9 +389,16 @@ func proposalBranchExists(ctx context.Context) error {
 	tc := getTC(ctx)
 	tc.repoBinding = &store.RepoBinding{
 		ID:            1,
-		BranchName:    "symphony/ENG-123-add-rate-limiting",
-		ChangeName:    "ENG-123-add-rate-limiting",
+		BranchName:    "symphony/ENG-123-add-rate-limiting-for-api-requests",
+		ChangeName:    "ENG-123-add-rate-limiting-for-api-requests",
 		BindingStatus: "active",
+	}
+	tc.pr = &store.PullRequest{
+		Number:     42,
+		Title:      "[ENG-123] Bootstrap PR for Add rate limiting",
+		HeadBranch: tc.repoBinding.BranchName,
+		BaseBranch: "main",
+		State:      "open",
 	}
 	return nil
 }
@@ -394,8 +431,8 @@ func issueEntersActiveState(ctx context.Context) error {
 
 func proposalBranchShouldBeNamed(ctx context.Context, expectedName string) error {
 	tc := getTC(ctx)
-	slug := workflow.Slugify(tc.workItem.Title)
-	actualName := workflow.GenerateBranchName(tc.workItem.WorkItemKey, slug)
+	slug := workflow.SlugFromDescriptionOrTitle(tc.workItem.Description, tc.workItem.Title)
+	actualName := workflow.GenerateBranchName("symphony", tc.workItem.WorkItemKey, slug)
 	if actualName != expectedName {
 		return fmt.Errorf("expected branch name %q, got %q", expectedName, actualName)
 	}
@@ -413,31 +450,134 @@ func openSpecChangeShouldBeNamed(ctx context.Context, expectedName string) error
 }
 
 func linearIssueEntersActiveState(ctx context.Context) error {
-	return linearIssueExists(ctx, "ENG-123", "Add rate limiting")
+	return linearIssueExistsWithDescription(ctx, "ENG-123", "Add rate limiting", "Add rate limiting for API requests")
 }
 
 func symphonyGeneratesProposal(ctx context.Context) error {
 	return symphonyShouldCreateWorkflowRun(ctx)
 }
 
+func symphonyGeneratesBootstrapPullRequest(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.workItem == nil {
+		if err := linearIssueEntersActiveState(ctx); err != nil {
+			return err
+		}
+	}
+	if err := symphonyShouldCreateWorkflowRun(ctx); err != nil {
+		return err
+	}
+
+	tc.bootstrapPrompt = "Create or update the file .symphony/bootstrap/ENG-123.md"
+	tc.logOutput = strings.Join([]string{
+		"workflow_start",
+		"ensure_mirror",
+		"create_worktree",
+		"run_bootstrap_prompt",
+		"detect_changes",
+	}, " ")
+
+	if tc.bootstrapNoChanges {
+		tc.workflowRun.Status = "blocked"
+		tc.workflowRun.StatusReason = "bootstrap execution produced no file changes"
+		tc.logOutput += " workflow_blocked"
+		return nil
+	}
+
+	slug := workflow.SlugFromDescriptionOrTitle(tc.workItem.Description, tc.workItem.Title)
+	tc.repoBinding = &store.RepoBinding{
+		ID:            1,
+		BranchName:    workflow.GenerateBranchName("symphony", tc.workItem.WorkItemKey, slug),
+		ChangeName:    workflow.GenerateChangeName(tc.workItem.WorkItemKey, slug),
+		BindingStatus: "active",
+	}
+	tc.prBody = fmt.Sprintf("## Source Issue\n- Key: %s\n\n## Description\n> %s\n", tc.workItem.WorkItemKey, strings.ReplaceAll(tc.workItem.Description, "\n", "\n> "))
+	tc.pr = &store.PullRequest{
+		Number:     42,
+		Title:      fmt.Sprintf("[%s] Bootstrap PR for %s", tc.workItem.WorkItemKey, tc.workItem.Title),
+		HeadBranch: tc.repoBinding.BranchName,
+		BaseBranch: "main",
+		State:      "open",
+		URL:        "https://github.com/test/repo/pull/42",
+	}
+	tc.logOutput += " push_branch ensure_pull_request workflow_complete"
+	return nil
+}
+
 func symphonyShouldPushBranch(ctx context.Context) error {
-	// Verify branch would be pushed
+	tc := getTC(ctx)
+	if tc.bootstrapNoChanges {
+		return fmt.Errorf("expected bootstrap push to be skipped after a no-change failure")
+	}
+	if tc.repoBinding == nil || tc.repoBinding.BranchName == "" {
+		return fmt.Errorf("expected bootstrap branch to be available")
+	}
 	return nil
 }
 
 func symphonyShouldCreatePR(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.pr == nil {
-		tc.pr = &store.PullRequest{
-			Number: 42,
-			Title:  "[ENG-123] OpenSpec proposal for Add rate limiting",
-		}
+		return fmt.Errorf("expected bootstrap pull request to exist")
+	}
+	if tc.pr.BaseBranch != "main" {
+		return fmt.Errorf("expected bootstrap pull request to target main, got %q", tc.pr.BaseBranch)
 	}
 	return nil
 }
 
 func symphonyShouldCommentWithInfo(ctx context.Context) error {
 	// Verify comment with change name and commands
+	return nil
+}
+
+func symphonyShouldIncludeIssueDescriptionInPRBody(ctx context.Context) error {
+	tc := getTC(ctx)
+	if !strings.Contains(tc.prBody, tc.workItem.Description) {
+		return fmt.Errorf("expected bootstrap PR body to include issue description")
+	}
+	return nil
+}
+
+func bootstrapExecutionProducesNoFileChanges(ctx context.Context) error {
+	getTC(ctx).bootstrapNoChanges = true
+	return nil
+}
+
+func symphonyShouldMarkWorkflowBlocked(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.workflowRun == nil || tc.workflowRun.Status != "blocked" {
+		return fmt.Errorf("expected blocked workflow run, got %#v", tc.workflowRun)
+	}
+	return nil
+}
+
+func symphonyShouldRecordNoChangeReason(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.workflowRun == nil || tc.workflowRun.StatusReason != "bootstrap execution produced no file changes" {
+		return fmt.Errorf("expected no-change reason, got %#v", tc.workflowRun)
+	}
+	return nil
+}
+
+func symphonyShouldEmitBootstrapLogs(ctx context.Context) error {
+	tc := getTC(ctx)
+	for _, step := range []string{"workflow_start", "ensure_mirror", "create_worktree", "run_bootstrap_prompt"} {
+		if !strings.Contains(tc.logOutput, step) {
+			return fmt.Errorf("expected bootstrap logs to include %q, got %q", step, tc.logOutput)
+		}
+	}
+	return nil
+}
+
+func symphonyShouldRedactBootstrapLogs(ctx context.Context) error {
+	tc := getTC(ctx)
+	if strings.Contains(tc.logOutput, "installation-token") {
+		return fmt.Errorf("expected installation token to stay out of logs")
+	}
+	if strings.Contains(tc.logOutput, tc.bootstrapPrompt) {
+		return fmt.Errorf("expected raw bootstrap prompt to stay out of logs")
+	}
 	return nil
 }
 

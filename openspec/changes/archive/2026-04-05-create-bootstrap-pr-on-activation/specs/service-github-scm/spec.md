@@ -1,6 +1,4 @@
-# Service: GitHub SCM
-
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: GitHub integration uses a GitHub App
 Symphony MUST use a GitHub App for GitHub API and git push operations and MUST rely on short-lived installation tokens for repository mutations.

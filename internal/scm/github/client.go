@@ -151,6 +151,39 @@ func (c *Client) CreatePullRequest(ctx context.Context, owner, repo, title, head
 	return pullRequest, nil
 }
 
+// FindOpenPullRequestByHead returns the first open pull request that matches the head/base branch pair.
+func (c *Client) FindOpenPullRequestByHead(ctx context.Context, owner, repo, head, base string) (*gh.PullRequest, error) {
+	apiClient, err := c.newAPIClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	options := &gh.PullRequestListOptions{
+		State: "open",
+		Head:  fmt.Sprintf("%s:%s", owner, head),
+		Base:  base,
+		ListOptions: gh.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	for {
+		pullRequests, response, err := apiClient.PullRequests.List(ctx, owner, repo, options)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list pull requests for %s/%s: %w", owner, repo, err)
+		}
+		if len(pullRequests) > 0 {
+			return pullRequests[0], nil
+		}
+		if response.NextPage == 0 {
+			break
+		}
+		options.Page = response.NextPage
+	}
+
+	return nil, nil
+}
+
 // CreateComment adds a comment to a pull request.
 func (c *Client) CreateComment(ctx context.Context, owner, repo string, number int, body string) error {
 	apiClient, err := c.newAPIClient(ctx)

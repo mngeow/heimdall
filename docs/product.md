@@ -20,11 +20,12 @@ The happy path for V1 is intentionally small:
 1. A Linear issue is moved into the configured active state.
 2. Symphony detects that transition during polling.
 3. Symphony creates a branch in the configured GitHub repository.
-4. Symphony generates a new OpenSpec change from the Linear issue title and description.
-5. Symphony commits the generated artifacts and opens a pull request against `main`.
-6. The engineer refines the spec from GitHub comments, which Symphony discovers during polling.
-7. When ready, the engineer triggers `/opsx-apply` from the PR with an allowed agent.
-8. Symphony commits the resulting changes back to the same branch.
+4. Symphony creates a small bootstrap file change from the Linear issue title and description.
+5. Symphony commits that bootstrap change and opens a pull request against `main`.
+6. The bootstrap PR proves the activation-to-PR path before Symphony later swaps that temporary file change for OpenSpec proposal generation.
+7. The engineer refines the spec from GitHub comments, which Symphony discovers during polling.
+8. When ready, the engineer triggers `/opsx-apply` from the PR with an allowed agent.
+9. Symphony commits the resulting changes back to the same branch.
 
 The user should not need a separate Symphony UI in V1.
 
@@ -62,12 +63,29 @@ To keep V1 easy to operate and easy to adopt, the design makes these choices:
 
 These defaults keep the product predictable and easy to reason about:
 
-- Branch name: `symphony/<issue-key>-<slug>`
-- OpenSpec change name: `<issue-key>-<slug>`
-- PR title: `[<issue-key>] OpenSpec proposal for <issue title>`
-- Initial commit message: `docs(openspec): propose <change-name>`
+- Branch name: `symphony/<issue-key>-<description-or-title-slug>`
+- Bootstrap file: `.symphony/bootstrap/<issue-key>.md`
+- PR title: `[<issue-key>] Bootstrap PR for <issue title>`
+- Initial bootstrap commit message: `docs: bootstrap <issue-key> via symphony`
+- No-change bootstrap result: fail the workflow as blocked and log the reason instead of opening an empty PR
 - Refinement commit message: `docs(openspec): refine <change-name>`
 - Apply commit message: `feat: implement <change-name> via symphony`
+
+## Activation Bootstrap Logging
+
+The activation bootstrap path should be easy to follow from host logs alone.
+
+Operators should expect structured log entries that include:
+
+- workflow run id
+- work item key
+- repository ref
+- branch name when known
+- worktree path when known
+- workflow step name and outcome
+- blocked or failure reason when the bootstrap flow cannot continue
+
+Logs must stay redacted enough to avoid exposing installation tokens or raw bootstrap prompt bodies.
 
 ## Routing Model
 

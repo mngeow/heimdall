@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 // OpenSpecClient wraps the openspec CLI
@@ -79,6 +80,51 @@ type Instructions struct {
 	Dependencies []string `json:"dependencies"`
 }
 
+// BootstrapRequest describes the activation-seeded bootstrap change to generate.
+type BootstrapRequest struct {
+	WorktreePath string
+	IssueKey     string
+	IssueTitle   string
+	Description  string
+	BranchName   string
+}
+
+// BootstrapResult describes the bootstrap change that was generated.
+type BootstrapResult struct {
+	Summary string
+}
+
+// BootstrapRunner runs the activation bootstrap prompt through opencode.
+type BootstrapRunner interface {
+	RunBootstrap(context.Context, BootstrapRequest) (*BootstrapResult, error)
+}
+
+// OpenCodeBootstrapRunner executes activation bootstrap prompts through the local opencode CLI.
+type OpenCodeBootstrapRunner struct{}
+
+// NewOpenCodeBootstrapRunner creates a runner for activation bootstrap prompts.
+func NewOpenCodeBootstrapRunner() *OpenCodeBootstrapRunner {
+	return &OpenCodeBootstrapRunner{}
+}
+
+// RunBootstrap executes the fixed activation bootstrap profile.
+func (r *OpenCodeBootstrapRunner) RunBootstrap(ctx context.Context, req BootstrapRequest) (*BootstrapResult, error) {
+	prompt := buildBootstrapPrompt(req)
+	cmd := exec.CommandContext(ctx,
+		"opencode", "run",
+		"--agent", "general",
+		"--model", "openai/gpt-5.4",
+		"--dir", req.WorktreePath,
+		prompt,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to run bootstrap prompt: %w (output: %s)", err, string(output))
+	}
+
+	return &BootstrapResult{Summary: bootstrapSummary(req)}, nil
+}
+
 // OpenCodeClient wraps the opencode CLI
 type OpenCodeClient struct {
 	worktreePath string
@@ -130,4 +176,33 @@ func (c *OpenCodeClient) GetVersion(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to get version: %w", err)
 	}
 	return string(output), nil
+}
+
+func buildBootstrapPrompt(req BootstrapRequest) string {
+	description := strings.TrimSpace(req.Description)
+	if description == "" {
+		description = "No issue description was provided."
+	}
+
+	return fmt.Sprintf(`You are creating Symphony's temporary activation bootstrap change.
+
+Work only inside this repository.
+Create or update the file .symphony/bootstrap/%s.md.
+Keep the change intentionally small and focused.
+Do not create an OpenSpec change.
+
+The file must contain:
+- a level-1 heading with the issue key and title
+- a short note that this is a temporary bootstrap file change created from activation
+- the issue description in a short quoted block
+
+Issue key: %s
+Issue title: %s
+Issue description:
+%s
+`, req.IssueKey, req.IssueKey, req.IssueTitle, description)
+}
+
+func bootstrapSummary(req BootstrapRequest) string {
+	return fmt.Sprintf("Created or updated .symphony/bootstrap/%s.md from the activation seed.", req.IssueKey)
 }

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 )
 
@@ -63,13 +64,15 @@ type RepoBinding struct {
 }
 
 // WorkItem operations
-func (s *Store) GetWorkItemByKey(ctx context.Context, provider, key string) (*WorkItem, error) {
+func (s *Store) GetWorkItemByID(ctx context.Context, workItemID int64) (*WorkItem, error) {
 	var item WorkItem
+	var project sql.NullString
+	var labelsJSON string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, provider, provider_work_item_id, work_item_key, title, state_name, lifecycle_bucket, team_key, last_seen_updated_at
-		 FROM work_items WHERE provider = ? AND work_item_key = ?`,
-		provider, key,
-	).Scan(&item.ID, &item.Provider, &item.ProviderWorkItemID, &item.WorkItemKey, &item.Title, &item.StateName, &item.LifecycleBucket, &item.Team, &item.LastSeenUpdatedAt)
+		`SELECT id, provider, provider_work_item_id, work_item_key, title, description, state_name, lifecycle_bucket, project_name, team_key, labels_json, last_seen_updated_at
+		 FROM work_items WHERE id = ?`,
+		workItemID,
+	).Scan(&item.ID, &item.Provider, &item.ProviderWorkItemID, &item.WorkItemKey, &item.Title, &item.Description, &item.StateName, &item.LifecycleBucket, &project, &item.Team, &labelsJSON, &item.LastSeenUpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -78,24 +81,71 @@ func (s *Store) GetWorkItemByKey(ctx context.Context, provider, key string) (*Wo
 		return nil, err
 	}
 
+	if project.Valid {
+		item.Project = project.String
+	}
+	if labelsJSON != "" {
+		if err := json.Unmarshal([]byte(labelsJSON), &item.Labels); err != nil {
+			return nil, err
+		}
+	}
+
+	return &item, nil
+}
+
+func (s *Store) GetWorkItemByKey(ctx context.Context, provider, key string) (*WorkItem, error) {
+	var item WorkItem
+	var project sql.NullString
+	var labelsJSON string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, provider, provider_work_item_id, work_item_key, title, description, state_name, lifecycle_bucket, project_name, team_key, labels_json, last_seen_updated_at
+		 FROM work_items WHERE provider = ? AND work_item_key = ?`,
+		provider, key,
+	).Scan(&item.ID, &item.Provider, &item.ProviderWorkItemID, &item.WorkItemKey, &item.Title, &item.Description, &item.StateName, &item.LifecycleBucket, &project, &item.Team, &labelsJSON, &item.LastSeenUpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if project.Valid {
+		item.Project = project.String
+	}
+	if labelsJSON != "" {
+		if err := json.Unmarshal([]byte(labelsJSON), &item.Labels); err != nil {
+			return nil, err
+		}
+	}
+
 	return &item, nil
 }
 
 func (s *Store) SaveWorkItem(ctx context.Context, item *WorkItem) error {
+	labelsJSON, err := json.Marshal(item.Labels)
+	if err != nil {
+		return err
+	}
+
 	lastSeenUpdatedAt := time.Now()
 	if item.LastSeenUpdatedAt != nil {
 		lastSeenUpdatedAt = item.LastSeenUpdatedAt.UTC()
 	}
 
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO work_items (provider, provider_work_item_id, work_item_key, title, state_name, lifecycle_bucket, team_key, last_seen_updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO work_items (provider, provider_work_item_id, work_item_key, title, description, state_name, lifecycle_bucket, project_name, team_key, labels_json, last_seen_updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(provider, work_item_key) DO UPDATE SET
 		 title = excluded.title,
+		 description = excluded.description,
 		 state_name = excluded.state_name,
 		 lifecycle_bucket = excluded.lifecycle_bucket,
+		 project_name = excluded.project_name,
+		 team_key = excluded.team_key,
+		 labels_json = excluded.labels_json,
 		 last_seen_updated_at = excluded.last_seen_updated_at`,
-		item.Provider, item.ProviderWorkItemID, item.WorkItemKey, item.Title, item.StateName, item.LifecycleBucket, item.Team, lastSeenUpdatedAt,
+		item.Provider, item.ProviderWorkItemID, item.WorkItemKey, item.Title, item.Description, item.StateName, item.LifecycleBucket, item.Project, item.Team, string(labelsJSON), lastSeenUpdatedAt,
 	)
 	if err != nil {
 		return err
@@ -117,6 +167,24 @@ func (s *Store) SaveWorkItem(ctx context.Context, item *WorkItem) error {
 	}
 
 	return nil
+}
+
+func (s *Store) GetRepositoryByID(ctx context.Context, repositoryID int64) (*Repository, error) {
+	var repo Repository
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, provider, repo_ref, owner, name, default_branch, branch_prefix, local_mirror_path, is_active
+		 FROM repositories WHERE id = ?`,
+		repositoryID,
+	).Scan(&repo.ID, &repo.Provider, &repo.RepoRef, &repo.Owner, &repo.Name, &repo.DefaultBranch, &repo.BranchPrefix, &repo.LocalMirrorPath, &repo.IsActive)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &repo, nil
 }
 
 // WorkItemEvent operations

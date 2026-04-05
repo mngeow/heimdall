@@ -44,6 +44,7 @@ type WorkflowRun struct {
 	TriggerEventID   *int64
 	RunType          string
 	Status           string
+	StatusReason     string
 	ChangeName       string
 	BranchName       string
 	WorktreePath     string
@@ -181,9 +182,9 @@ func (s *Store) SaveCommandRequest(ctx context.Context, req *CommandRequest) err
 // WorkflowRun operations
 func (s *Store) CreateWorkflowRun(ctx context.Context, run *WorkflowRun) error {
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO workflow_runs (work_item_id, repository_id, trigger_event_id, run_type, status, change_name, branch_name, worktree_path, requested_by_type, requested_by_login, attempt_count)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		run.WorkItemID, run.RepositoryID, run.TriggerEventID, run.RunType, run.Status, run.ChangeName, run.BranchName, run.WorktreePath, run.RequestedByType, run.RequestedByLogin, run.AttemptCount,
+		`INSERT INTO workflow_runs (work_item_id, repository_id, trigger_event_id, run_type, status, status_reason, change_name, branch_name, worktree_path, requested_by_type, requested_by_login, attempt_count)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		run.WorkItemID, run.RepositoryID, run.TriggerEventID, run.RunType, run.Status, run.StatusReason, run.ChangeName, run.BranchName, run.WorktreePath, run.RequestedByType, run.RequestedByLogin, run.AttemptCount,
 	)
 	if err != nil {
 		return err
@@ -194,12 +195,48 @@ func (s *Store) CreateWorkflowRun(ctx context.Context, run *WorkflowRun) error {
 	return nil
 }
 
-func (s *Store) UpdateWorkflowRunStatus(ctx context.Context, runID int64, status string) error {
+func (s *Store) GetWorkflowRun(ctx context.Context, runID int64) (*WorkflowRun, error) {
+	var run WorkflowRun
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, work_item_id, repository_id, trigger_event_id, run_type, status, COALESCE(status_reason, ''), change_name, branch_name, worktree_path, requested_by_type, requested_by_login, attempt_count
+		 FROM workflow_runs WHERE id = ?`,
+		runID,
+	).Scan(&run.ID, &run.WorkItemID, &run.RepositoryID, &run.TriggerEventID, &run.RunType, &run.Status, &run.StatusReason, &run.ChangeName, &run.BranchName, &run.WorktreePath, &run.RequestedByType, &run.RequestedByLogin, &run.AttemptCount)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &run, nil
+}
+
+func (s *Store) UpdateWorkflowRunStatus(ctx context.Context, runID int64, status, reason string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE workflow_runs SET status = ? WHERE id = ?`,
-		status, runID,
+		`UPDATE workflow_runs SET status = ?, status_reason = ? WHERE id = ?`,
+		status, reason, runID,
 	)
 	return err
+}
+
+func (s *Store) GetPullRequestByBindingID(ctx context.Context, bindingID int64) (*PullRequest, error) {
+	var pr PullRequest
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, repository_id, repo_binding_id, provider, provider_pr_node_id, number, title, base_branch, head_branch, state, url
+		 FROM pull_requests WHERE repo_binding_id = ? ORDER BY id DESC LIMIT 1`,
+		bindingID,
+	).Scan(&pr.ID, &pr.RepositoryID, &pr.RepoBindingID, &pr.Provider, &pr.ProviderPRNodeID, &pr.Number, &pr.Title, &pr.BaseBranch, &pr.HeadBranch, &pr.State, &pr.URL)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &pr, nil
 }
 
 // WorkflowStep operations

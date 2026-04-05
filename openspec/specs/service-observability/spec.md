@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Symphony emits structured operational logs
-Symphony MUST emit structured operational logs to stdout and stderr so a Linux service manager such as `systemd` and `journald` can collect them without application-managed log files, and v1 operators MUST be able to inspect those logs through the host journal.
+Symphony MUST emit structured operational logs to stdout and stderr so a Linux service manager such as `systemd` and `journald` can collect them without application-managed log files, and v1 operators MUST be able to inspect those logs through the host journal. For activation-triggered bootstrap workflows, those logs MUST include step-level context that lets operators trace workflow progress and diagnose failures without exposing secrets or raw prompt bodies.
 
 #### Scenario: Symphony runs under systemd
 - **WHEN** Symphony is started as a `systemd` service on a Linux host
@@ -14,6 +14,11 @@ Symphony MUST emit structured operational logs to stdout and stderr so a Linux s
 - **WHEN** an operator follows the Symphony service journal on the Linux host
 - **THEN** current structured workflow logs are visible through the host journal stream
 - **AND** no separate application-managed log file is required for normal debugging
+
+#### Scenario: Operator tails logs during an activation bootstrap workflow
+- **WHEN** an operator follows Symphony logs while an activation-triggered bootstrap pull request workflow is running
+- **THEN** the logs identify the workflow run, work item, repository, current workflow step, and step outcome as the run moves through routing, worktree creation, OpenCode execution, git mutation, and pull request reconciliation
+- **AND** the logs include blocked, retry, and failure reasons that are specific enough for debugging without exposing secrets, installation tokens, or raw prompt content
 
 ### Requirement: Symphony exposes health and readiness signals
 Symphony MUST expose separate health and readiness endpoints for operator and platform checks.

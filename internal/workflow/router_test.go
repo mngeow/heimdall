@@ -15,6 +15,8 @@ func TestSlugify(t *testing.T) {
 		{"Fix bug in API", "fix-bug-in-api"},
 		{"Update documentation", "update-documentation"},
 		{"Test123", "test123"},
+		{"Add   rate limiting!!!", "add-rate-limiting"},
+		{"###", ""},
 	}
 
 	for _, tt := range tests {
@@ -28,10 +30,46 @@ func TestSlugify(t *testing.T) {
 }
 
 func TestGenerateBranchName(t *testing.T) {
-	result := GenerateBranchName("ENG-123", "add-rate-limiting")
+	result := GenerateBranchName("symphony", "ENG-123", "add-rate-limiting")
 	expected := "symphony/ENG-123-add-rate-limiting"
 	if result != expected {
 		t.Errorf("GenerateBranchName() = %q, want %q", result, expected)
+	}
+}
+
+func TestSlugFromDescriptionOrTitle(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		title       string
+		want        string
+	}{
+		{
+			name:        "description wins when usable",
+			description: "Add rate limiting for API requests",
+			title:       "Add rate limiting",
+			want:        "add-rate-limiting-for-api-requests",
+		},
+		{
+			name:        "title fallback when description empty",
+			description: "",
+			title:       "Add rate limiting",
+			want:        "add-rate-limiting",
+		},
+		{
+			name:        "title fallback when description unusable",
+			description: "###",
+			title:       "Add rate limiting",
+			want:        "add-rate-limiting",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SlugFromDescriptionOrTitle(tt.description, tt.title); got != tt.want {
+				t.Fatalf("SlugFromDescriptionOrTitle() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -40,6 +78,14 @@ func TestGenerateChangeName(t *testing.T) {
 	expected := "ENG-123-add-rate-limiting"
 	if result != expected {
 		t.Errorf("GenerateChangeName() = %q, want %q", result, expected)
+	}
+}
+
+func TestGenerateWorktreePath(t *testing.T) {
+	result := GenerateWorktreePath("/var/lib/symphony/repos/github.com/acme/platform.git", "symphony/ENG-123-add-rate-limiting")
+	expected := "/var/lib/symphony/repos/github.com/acme/platform-worktrees/symphony-ENG-123-add-rate-limiting"
+	if result != expected {
+		t.Fatalf("GenerateWorktreePath() = %q, want %q", result, expected)
 	}
 }
 

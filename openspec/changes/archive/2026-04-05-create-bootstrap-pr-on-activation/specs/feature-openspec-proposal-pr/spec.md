@@ -1,6 +1,4 @@
-# Feature: OpenSpec Proposal Pull Request
-
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Activation bootstrap is seeded from work item content
 Symphony MUST extract the activated work item's title and description and MUST use that content as the seed for the activation-triggered bootstrap pull request flow.

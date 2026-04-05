@@ -1,6 +1,4 @@
-# Service: Execution Runtime
-
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: OpenSpec and OpenCode execution runs locally on the host
 Symphony MUST run activation-triggered bootstrap execution through the local `opencode` CLI on the Linux host where Symphony is running, and it MUST verify that required local executables such as `git`, `openspec`, and `opencode` are available before the service reports readiness.
@@ -23,11 +21,6 @@ The initial activation-triggered bootstrap pull request flow MUST NOT require Op
 - **THEN** it does not block on OpenSpec change discovery, artifact dependencies, or apply readiness
 - **AND** it executes the bootstrap workflow from the issue seed data and repository state alone
 
-#### Scenario: Apply workflow is requested from a pull request comment
-- **WHEN** Symphony prepares to run `/opsx-apply` for an OpenSpec change
-- **THEN** it reads OpenSpec apply instructions and current status from CLI JSON output
-- **AND** it does not guess task readiness or context file selection from filesystem conventions alone
-
 ### Requirement: Agent selection is explicit and policy-controlled
 The execution runtime MUST use the fixed OpenCode bootstrap profile of the general agent with model `gpt-5.4` for activation-triggered workflows, MUST continue to use the repository's default spec-writing agent for refine operations, and MUST require an explicitly selected allowlisted agent for apply operations.
 
@@ -44,8 +37,8 @@ The execution runtime MUST use the fixed OpenCode bootstrap profile of the gener
 ### Requirement: Execution metadata is auditable
 The execution runtime MUST record the command, executor, and version details needed to audit and troubleshoot proposal, refine, apply, archive, and activation-triggered bootstrap steps.
 
-#### Scenario: Symphony runs an OpenSpec or OpenCode step
-- **WHEN** Symphony executes a workflow step through `openspec`, `opencode`, `git`, or GitHub API-backed repository mutation logic
+#### Scenario: Symphony runs an OpenCode bootstrap step
+- **WHEN** Symphony executes an activation-triggered workflow step through `opencode`, `git`, or GitHub API-backed repository mutation logic
 - **THEN** it records the step outcome and the executor details needed for audit and recovery
 - **AND** those records are linked to the workflow run they belong to
 

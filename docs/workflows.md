@@ -18,7 +18,7 @@ Suggested normalized active trigger name:
 
 That avoids hard-coding `In Progress` deep in the core workflow engine and keeps room for Jira later.
 
-### Propose Flow
+### Bootstrap PR Flow
 
 ```mermaid
 flowchart LR
@@ -27,26 +27,26 @@ flowchart LR
     Run --> Repo["Repository resolved"]
     Repo --> Mirror["Repo mirror synced"]
     Mirror --> Worktree["Branch worktree created"]
-    Worktree --> Change["OpenSpec change scaffolded"]
-    Change --> Artifacts["Spec artifacts generated"]
-    Artifacts --> Commit["Commit and push"]
-    Commit --> PR["Pull request opened"]
-    PR --> Comment["Success comment posted"]
+    Worktree --> Bootstrap["Bootstrap file change generated"]
+    Bootstrap --> Check["No-change check"]
+    Check --> Commit["Commit and push"]
+    Commit --> PR["Pull request opened or reused"]
 ```
 
 Detailed flow:
 
 1. Resolve the target repository.
 2. Reconcile whether a branch or PR already exists for this issue.
-3. Create or reuse branch `symphony/<issue-key>-<slug>`.
-4. Create or reuse OpenSpec change `<issue-key>-<slug>`.
-5. Run `openspec new change <name>` if the change does not exist.
-6. Run `openspec status --change <name> --json`.
-7. Generate required artifacts in dependency order using OpenSpec instructions and local OpenCode execution.
-8. Commit the resulting files.
-9. Push the branch.
-10. Open a PR against `main` if one does not exist.
-11. Comment on the PR with the current change name, status, and next available commands.
+3. Create or reuse branch `symphony/<issue-key>-<description-or-title-slug>`.
+4. Ensure the configured bare mirror exists at `SYMPHONY_REPO_<id>_LOCAL_MIRROR_PATH`.
+5. Create a worktree from that mirror for the bootstrap branch.
+6. Run local `opencode` with the fixed activation bootstrap profile of the `general` agent and model `gpt-5.4`.
+7. Ask OpenCode to create or update `.symphony/bootstrap/<issue-key>.md` as the intentionally small bootstrap file change.
+8. Fail the workflow as blocked if the bootstrap run leaves no repository changes.
+9. Commit the bootstrap file change.
+10. Push the branch by using a GitHub App installation token.
+11. Open or reuse a PR against `main` with the source issue context in the title and body.
+12. Emit structured logs for each major workflow step so operators can follow progress and diagnose failures from the host journal.
 
 ## Workflow 2: Refine Specs From A PR Comment
 

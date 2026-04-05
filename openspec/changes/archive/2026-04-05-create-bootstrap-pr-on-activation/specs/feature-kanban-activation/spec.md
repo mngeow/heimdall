@@ -1,6 +1,4 @@
-# Feature: Kanban Activation
-
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Active state transitions start bootstrap workflows
 Symphony MUST detect when a configured work item transitions into the normalized `active` lifecycle bucket and start a bootstrap pull request workflow for the mapped repository.
