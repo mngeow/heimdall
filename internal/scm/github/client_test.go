@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -102,6 +103,99 @@ func TestFindOpenPullRequestByHead(t *testing.T) {
 	}
 	if pullRequest == nil || pullRequest.GetNumber() != 42 {
 		t.Fatalf("expected open pull request #42, got %#v", pullRequest)
+	}
+}
+
+func TestEnsurePRMonitorLabelCreatesMissingLabel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/app/installations/42/access_tokens":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"token":"installation-token"}`)
+		case "/repos/acme/platform/labels/symphony-monitored":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"message":"Not Found"}`)
+		case "/repos/acme/platform/labels":
+			if r.Method != http.MethodPost {
+				t.Fatalf("expected POST, got %s", r.Method)
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("io.ReadAll() error = %v", err)
+			}
+			if !strings.Contains(string(body), `"name":"symphony-monitored"`) {
+				t.Fatalf("expected label create payload, got %s", body)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"name":"symphony-monitored"}`)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server)
+	if err := client.EnsurePRMonitorLabel(t.Context(), "acme", "platform", "symphony-monitored"); err != nil {
+		t.Fatalf("EnsurePRMonitorLabel() error = %v", err)
+	}
+}
+
+func TestEnsurePRMonitorLabelReusesExistingLabel(t *testing.T) {
+	createCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/app/installations/42/access_tokens":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"token":"installation-token"}`)
+		case "/repos/acme/platform/labels/symphony-monitored":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"name":"symphony-monitored"}`)
+		case "/repos/acme/platform/labels":
+			createCalled = true
+			w.WriteHeader(http.StatusCreated)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server)
+	if err := client.EnsurePRMonitorLabel(t.Context(), "acme", "platform", "symphony-monitored"); err != nil {
+		t.Fatalf("EnsurePRMonitorLabel() error = %v", err)
+	}
+	if createCalled {
+		t.Fatal("expected existing label to be reused without create call")
+	}
+}
+
+func TestAddPRMonitorLabelAddsLabelToPullRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/app/installations/42/access_tokens":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"token":"installation-token"}`)
+		case "/repos/acme/platform/issues/42/labels":
+			if r.Method != http.MethodPost {
+				t.Fatalf("expected POST, got %s", r.Method)
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("io.ReadAll() error = %v", err)
+			}
+			if !strings.Contains(string(body), "symphony-monitored") {
+				t.Fatalf("expected label add payload, got %s", body)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `[{"name":"symphony-monitored"}]`)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server)
+	if err := client.AddPRMonitorLabel(t.Context(), "acme", "platform", 42, "symphony-monitored"); err != nil {
+		t.Fatalf("AddPRMonitorLabel() error = %v", err)
 	}
 }
 

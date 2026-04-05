@@ -320,6 +320,7 @@ func syncConfiguredRepositories(ctx context.Context, runtimeStore *store.Store, 
 			Name:            name,
 			DefaultBranch:   repoConfig.DefaultBranch,
 			BranchPrefix:    repoConfig.BranchPrefix,
+			PRMonitorLabel:  repoConfig.PRMonitorLabel,
 			LocalMirrorPath: repoConfig.LocalMirrorPath,
 			IsActive:        true,
 		}

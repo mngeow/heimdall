@@ -123,6 +123,34 @@ func TestLoadFromDirRequiresLinearProjectName(t *testing.T) {
 	}
 }
 
+func TestLoadFromDirReadsRepoPRMonitorLabel(t *testing.T) {
+	clearSymphonyEnv(t)
+	projectRoot := t.TempDir()
+	writeTestFile(t, filepath.Join(projectRoot, ".env"), validDotenvWithExtra("main", "SYMPHONY_REPO_PLATFORM_PR_MONITOR_LABEL=symphony-monitored"))
+
+	cfg, err := LoadFromDir(projectRoot)
+	if err != nil {
+		t.Fatalf("LoadFromDir() error = %v", err)
+	}
+	if got := cfg.Repos[0].PRMonitorLabel; got != "symphony-monitored" {
+		t.Fatalf("expected PR monitor label symphony-monitored, got %q", got)
+	}
+}
+
+func TestLoadFromDirRejectsEmptyRepoPRMonitorLabel(t *testing.T) {
+	clearSymphonyEnv(t)
+	projectRoot := t.TempDir()
+	writeTestFile(t, filepath.Join(projectRoot, ".env"), validDotenvWithExtra("main", "SYMPHONY_REPO_PLATFORM_PR_MONITOR_LABEL=   "))
+
+	_, err := LoadFromDir(projectRoot)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "SYMPHONY_REPO_PLATFORM_PR_MONITOR_LABEL") {
+		t.Fatalf("expected PR monitor label validation error, got %v", err)
+	}
+}
+
 func clearSymphonyEnv(t *testing.T) {
 	t.Helper()
 
@@ -191,6 +219,12 @@ func validDotenv(baseBranch string) string {
 	for key, value := range validEnvMap(baseBranch) {
 		lines = append(lines, key+"="+value)
 	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func validDotenvWithExtra(baseBranch string, extraLines ...string) string {
+	lines := []string{strings.TrimSuffix(validDotenv(baseBranch), "\n")}
+	lines = append(lines, extraLines...)
 	return strings.Join(lines, "\n") + "\n"
 }
 

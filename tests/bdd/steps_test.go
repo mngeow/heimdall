@@ -46,6 +46,8 @@ type testContext struct {
 	prBody             string
 	logOutput          string
 	bootstrapPrompt    string
+	prLabels           []string
+	repositoryLabels   []string
 	projectRoot        string
 	envSnapshot        map[string]envState
 	linearPollResult   *linear.PollResult
@@ -155,6 +157,8 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^Symphony should push the bootstrap branch$`, symphonyShouldPushBranch)
 	sc.Step(`^Symphony should create a pull request to main$`, symphonyShouldCreatePR)
 	sc.Step(`^Symphony should create or reuse a bootstrap pull request to main$`, symphonyShouldCreatePR)
+	sc.Step(`^Symphony should create or reuse repository label "([^"]*)"$`, symphonyShouldCreateOrReuseRepositoryLabel)
+	sc.Step(`^Symphony should apply the monitor label "([^"]*)" to the bootstrap pull request$`, symphonyShouldApplyMonitorLabelToBootstrapPullRequest)
 	sc.Step(`^Symphony should comment with the change name and available commands$`, symphonyShouldCommentWithInfo)
 	sc.Step(`^Symphony should include the issue description in the bootstrap pull request body$`, symphonyShouldIncludeIssueDescriptionInPRBody)
 	sc.Step(`^the bootstrap execution produces no file changes$`, bootstrapExecutionProducesNoFileChanges)
@@ -162,6 +166,8 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^Symphony should record the no-change reason$`, symphonyShouldRecordNoChangeReason)
 	sc.Step(`^Symphony should emit activation bootstrap logs with workflow step names$`, symphonyShouldEmitBootstrapLogs)
 	sc.Step(`^Symphony should not log installation tokens or raw bootstrap prompts$`, symphonyShouldRedactBootstrapLogs)
+	sc.Step(`^the repository configures PR monitor label "([^"]*)"$`, repositoryConfiguresPRMonitorLabel)
+	sc.Step(`^the pull request carries monitor label "([^"]*)"$`, pullRequestCarriesMonitorLabel)
 
 	// Command handling steps
 	sc.Step(`^the user comments "([^"]*)"$`, userComments)
@@ -187,6 +193,7 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^a command comment exists$`, commandCommentExists)
 	sc.Step(`^Symphony polls an edited version of the same comment$`, commentIsEdited)
 	sc.Step(`^the edit should not trigger a new command execution$`, editShouldNotTriggerExecution)
+	sc.Step(`^Symphony should ignore the pull request because it is missing monitor label$`, symphonyShouldIgnorePullRequestMissingMonitorLabel)
 
 	// Security steps
 	sc.Step(`^a pull request not created by Symphony$`, nonSymphonyPRExists)
@@ -285,6 +292,26 @@ func symphonyManagedPRExists(ctx context.Context) error {
 	}
 	if err := tc.store.SavePullRequest(ctx, tc.pr); err != nil {
 		return err
+	}
+	tc.prLabels = nil
+	return nil
+}
+
+func repositoryConfiguresPRMonitorLabel(ctx context.Context, label string) error {
+	tc := getTC(ctx)
+	if tc.config == nil {
+		if err := symphonyIsConfigured(ctx); err != nil {
+			return err
+		}
+	}
+	tc.config.Repos[0].PRMonitorLabel = label
+	return nil
+}
+
+func pullRequestCarriesMonitorLabel(ctx context.Context, label string) error {
+	tc := getTC(ctx)
+	if !containsString(tc.prLabels, label) {
+		tc.prLabels = append(tc.prLabels, label)
 	}
 	return nil
 }
@@ -500,6 +527,17 @@ func symphonyGeneratesBootstrapPullRequest(ctx context.Context) error {
 		State:      "open",
 		URL:        "https://github.com/test/repo/pull/42",
 	}
+	if tc.config != nil {
+		label := tc.config.Repos[0].PRMonitorLabel
+		if label != "" {
+			if !containsString(tc.repositoryLabels, label) {
+				tc.repositoryLabels = append(tc.repositoryLabels, label)
+			}
+			if !containsString(tc.prLabels, label) {
+				tc.prLabels = append(tc.prLabels, label)
+			}
+		}
+	}
 	tc.logOutput += " push_branch ensure_pull_request workflow_complete"
 	return nil
 }
@@ -522,6 +560,22 @@ func symphonyShouldCreatePR(ctx context.Context) error {
 	}
 	if tc.pr.BaseBranch != "main" {
 		return fmt.Errorf("expected bootstrap pull request to target main, got %q", tc.pr.BaseBranch)
+	}
+	return nil
+}
+
+func symphonyShouldCreateOrReuseRepositoryLabel(ctx context.Context, label string) error {
+	tc := getTC(ctx)
+	if !containsString(tc.repositoryLabels, label) {
+		return fmt.Errorf("expected repository label %q, got %#v", label, tc.repositoryLabels)
+	}
+	return nil
+}
+
+func symphonyShouldApplyMonitorLabelToBootstrapPullRequest(ctx context.Context, label string) error {
+	tc := getTC(ctx)
+	if !containsString(tc.prLabels, label) {
+		return fmt.Errorf("expected bootstrap PR to carry label %q, got %#v", label, tc.prLabels)
 	}
 	return nil
 }
@@ -620,6 +674,10 @@ func symphonyPollsGitHub(ctx context.Context) error {
 	if tc.repoBinding == nil || tc.pr == nil {
 		tc.isRejected = true
 		tc.rejectionReason = "PR is not Symphony-managed"
+		return nil
+	}
+	if label := tc.config.Repos[0].PRMonitorLabel; label != "" && !containsString(tc.prLabels, label) {
+		tc.rejectionReason = "PR is missing the configured monitor label"
 		return nil
 	}
 
@@ -790,6 +848,20 @@ func editShouldNotTriggerExecution(ctx context.Context) error {
 	return nil
 }
 
+func symphonyShouldIgnorePullRequestMissingMonitorLabel(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.workflowQueued {
+		return fmt.Errorf("expected unlabeled PR to be ignored without queueing work")
+	}
+	if tc.lastPollResult != nil {
+		return fmt.Errorf("expected unlabeled PR to be ignored before command intake, got %#v", tc.lastPollResult)
+	}
+	if !strings.Contains(tc.rejectionReason, "monitor label") {
+		return fmt.Errorf("expected missing monitor label reason, got %q", tc.rejectionReason)
+	}
+	return nil
+}
+
 // Security step implementations
 func nonSymphonyPRExists(ctx context.Context) error {
 	tc := getTC(ctx)
@@ -816,6 +888,15 @@ func symphonyShouldRecordNotEligible(ctx context.Context) error {
 		return fmt.Errorf("expected a rejection reason for non-eligible PR")
 	}
 	return nil
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func symphonyRunsWithoutPublicGitHubWebhookEndpoint(ctx context.Context) error {

@@ -13,12 +13,13 @@ Reasons:
 
 ## Recommended GitHub App Permissions
 
-Start with the smallest practical set:
+Start with the smallest practical set for Symphony's current PR-only flow:
 
 - Metadata: read
 - Contents: read and write
 - Pull requests: read and write
-- Issues: read and write
+
+`Issues` is not required for Symphony's current v1 tasks. GitHub's GitHub App permissions matrix allows pull request creation, pull request comment polling and posting, repository-label creation, and PR label assignment under `Pull requests` for PR-backed flows. Add `Issues` only if Symphony later needs to act on standalone GitHub issues.
 
 Possible later additions:
 

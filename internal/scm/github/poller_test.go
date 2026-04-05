@@ -161,6 +161,83 @@ func TestPollerUsesCheckpointOverlapWindow(t *testing.T) {
 	}
 }
 
+func TestPollerIgnoresUnlabeledPullRequestsWhenMonitorLabelConfigured(t *testing.T) {
+	ctx := context.Background()
+	runtimeStore := newPollerTestStore(t, ctx)
+
+	repository := &store.Repository{
+		Provider:        "github",
+		RepoRef:         "github.com/acme/platform",
+		Owner:           "acme",
+		Name:            "platform",
+		DefaultBranch:   "main",
+		BranchPrefix:    "symphony",
+		PRMonitorLabel:  "symphony-monitored",
+		LocalMirrorPath: "/tmp/platform.git",
+		IsActive:        true,
+	}
+	if err := runtimeStore.SaveRepository(ctx, repository); err != nil {
+		t.Fatalf("SaveRepository() error = %v", err)
+	}
+
+	bindingID := int64(7)
+	if err := runtimeStore.SavePullRequest(ctx, &store.PullRequest{
+		RepositoryID:  repository.ID,
+		RepoBindingID: &bindingID,
+		Provider:      "github",
+		Number:        42,
+		Title:         "Tracked PR",
+		BaseBranch:    "main",
+		HeadBranch:    "symphony/eng-123-add-rate-limiting",
+		State:         "open",
+		URL:           "https://github.com/acme/platform/pull/42",
+	}); err != nil {
+		t.Fatalf("SavePullRequest() error = %v", err)
+	}
+
+	now := time.Date(2026, 4, 4, 15, 0, 0, 0, time.UTC)
+	api := &fakePollAPI{
+		comments: []*gh.IssueComment{
+			newIssueComment(42, "IC_1", "/symphony status", "alice", now.Add(-30*time.Second)),
+		},
+		pullRequests: map[int]*gh.PullRequest{
+			42: {
+				NodeID:  gh.String("PR_node_42"),
+				Title:   gh.String("Updated title"),
+				Base:    &gh.PullRequestBranch{Ref: gh.String("main")},
+				Head:    &gh.PullRequestBranch{Ref: gh.String("symphony/eng-123-add-rate-limiting")},
+				State:   gh.String("open"),
+				HTMLURL: gh.String("https://github.com/acme/platform/pull/42"),
+			},
+		},
+	}
+
+	poller := NewPoller(api, runtimeStore, 2*time.Minute)
+	poller.now = func() time.Time { return now }
+
+	result, err := poller.Poll(ctx)
+	if err != nil {
+		t.Fatalf("Poll() error = %v", err)
+	}
+	if len(result.Commands) != 0 {
+		t.Fatalf("expected no discovered commands for unlabeled PR, got %d", len(result.Commands))
+	}
+	if len(result.Reconciled) != 0 {
+		t.Fatalf("expected no reconciled PRs for unlabeled PR, got %d", len(result.Reconciled))
+	}
+
+	storedPR, err := runtimeStore.GetPullRequestByNumber(ctx, repository.ID, 42)
+	if err != nil {
+		t.Fatalf("GetPullRequestByNumber() error = %v", err)
+	}
+	if storedPR.Title != "Tracked PR" {
+		t.Fatalf("expected PR title to remain unchanged, got %q", storedPR.Title)
+	}
+	if len(api.sinceCalls) != 0 {
+		t.Fatalf("expected no issue comment polling when no labeled PRs are eligible, got %v", api.sinceCalls)
+	}
+}
+
 type fakePollAPI struct {
 	comments     []*gh.IssueComment
 	pullRequests map[int]*gh.PullRequest

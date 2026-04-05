@@ -24,6 +24,8 @@ type bootstrapGitHubClient interface {
 	GetInstallationToken(context.Context) (string, error)
 	FindOpenPullRequestByHead(context.Context, string, string, string, string) (*gh.PullRequest, error)
 	CreatePullRequest(context.Context, string, string, string, string, string, string) (*gh.PullRequest, error)
+	EnsurePRMonitorLabel(context.Context, string, string, string) error
+	AddPRMonitorLabel(context.Context, string, string, int, string) error
 }
 
 // BootstrapWorkflow handles the activation-triggered bootstrap pull request workflow.
@@ -234,6 +236,15 @@ func (w *BootstrapWorkflow) ensurePullRequest(ctx context.Context, repository *s
 		pullRequest, err = w.github.CreatePullRequest(ctx, repository.Owner, repository.Name, buildBootstrapPRTitle(workItem), run.BranchName, repository.DefaultBranch, buildBootstrapPRBody(workItem, bootstrapResult))
 		if err != nil {
 			return nil, false, w.failRun(ctx, run.ID, logger, stepOrder, "ensure_pull_request", "github", "pull_requests.create", "failed to create bootstrap pull request", err)
+		}
+	}
+
+	if repository.PRMonitorLabel != "" {
+		if err := w.github.EnsurePRMonitorLabel(ctx, repository.Owner, repository.Name, repository.PRMonitorLabel); err != nil {
+			return nil, false, w.failRun(ctx, run.ID, logger, stepOrder, "ensure_pull_request", "github", "issues.create_label", "failed to reconcile PR monitor label", err)
+		}
+		if err := w.github.AddPRMonitorLabel(ctx, repository.Owner, repository.Name, pullRequest.GetNumber(), repository.PRMonitorLabel); err != nil {
+			return nil, false, w.failRun(ctx, run.ID, logger, stepOrder, "ensure_pull_request", "github", "issues.add_labels", "failed to apply PR monitor label", err)
 		}
 	}
 

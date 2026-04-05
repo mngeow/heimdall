@@ -71,6 +71,7 @@ SYMPHONY_REPO_PLATFORM_BRANCH_PREFIX=symphony
 SYMPHONY_REPO_PLATFORM_LINEAR_TEAM_KEYS=ENG
 SYMPHONY_REPO_PLATFORM_ALLOWED_AGENTS=gpt-5.4,claude-sonnet
 SYMPHONY_REPO_PLATFORM_ALLOWED_USERS=your-github-username
+SYMPHONY_REPO_PLATFORM_PR_MONITOR_LABEL=symphony-monitored
 ```
 
 The local `.env` file is ignored by git. `dist.env` stays committed as the supported settings template.

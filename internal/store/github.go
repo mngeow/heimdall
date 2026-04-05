@@ -10,7 +10,7 @@ const githubPollingProvider = "github"
 // ListActiveRepositories returns repositories that Symphony should manage.
 func (s *Store) ListActiveRepositories(ctx context.Context) ([]Repository, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, provider, repo_ref, owner, name, default_branch, branch_prefix, local_mirror_path, is_active
+		`SELECT id, provider, repo_ref, owner, name, default_branch, branch_prefix, pr_monitor_label, local_mirror_path, is_active
 		 FROM repositories WHERE is_active = 1 ORDER BY repo_ref ASC`,
 	)
 	if err != nil {
@@ -21,7 +21,7 @@ func (s *Store) ListActiveRepositories(ctx context.Context) ([]Repository, error
 	var repos []Repository
 	for rows.Next() {
 		var repo Repository
-		if err := rows.Scan(&repo.ID, &repo.Provider, &repo.RepoRef, &repo.Owner, &repo.Name, &repo.DefaultBranch, &repo.BranchPrefix, &repo.LocalMirrorPath, &repo.IsActive); err != nil {
+		if err := rows.Scan(&repo.ID, &repo.Provider, &repo.RepoRef, &repo.Owner, &repo.Name, &repo.DefaultBranch, &repo.BranchPrefix, &repo.PRMonitorLabel, &repo.LocalMirrorPath, &repo.IsActive); err != nil {
 			return nil, err
 		}
 		repos = append(repos, repo)

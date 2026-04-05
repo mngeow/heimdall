@@ -88,14 +88,13 @@ Recommended repository permissions:
 - Metadata: read-only
 - Contents: read and write
 - Pull requests: read and write
-- Issues: read and write
 
 Why these are needed:
 
-- Metadata lets Symphony inspect repository identity and installation scope.
+- Metadata lets Symphony inspect repository identity, installation scope, and collaborator permission levels for command authorization.
 - Contents lets Symphony push proposal and apply branches.
-- Pull requests lets Symphony create, read, and update pull requests.
-- Issues lets Symphony read and write pull request comments because GitHub exposes PR comments through the issues API surface.
+- Pull requests lets Symphony create, read, and update pull requests, poll and publish PR comments, create the repository label used for monitored PRs, and add that label to pull requests.
+- Issues is not required for Symphony's current PR-only flow. GitHub exposes pull request comments and labels through issues-style endpoints, but GitHub's GitHub App permissions matrix allows those pull-request operations under `Pull requests` permission. Add `Issues` only if Symphony later needs to act on standalone GitHub issues.
 
 Do not add broader permissions until there is a concrete need.
 
@@ -202,6 +201,19 @@ SYMPHONY_GITHUB_POLL_INTERVAL=30s
 SYMPHONY_GITHUB_LOOKBACK_WINDOW=2m
 ```
 
+If you want GitHub polling in repository `PLATFORM` limited to explicitly labeled Symphony pull requests, add the optional per-repository setting:
+
+```dotenv
+SYMPHONY_REPO_PLATFORM_PR_MONITOR_LABEL=symphony-monitored
+```
+
+When this setting is present, Symphony should:
+
+- create the repository label automatically if it does not already exist
+- reuse the existing repository label if it already exists
+- add that label automatically to Symphony-created or reconciled pull requests for that repository
+- ignore unlabeled pull requests in that repository for comment and lifecycle polling
+
 If your exact config schema differs, preserve the same meaning even if the final field names change.
 
 ## Step 8: Know What Symphony Should Poll
@@ -213,9 +225,9 @@ Recommended cycle behavior:
 1. Load the last successful GitHub polling checkpoint from SQLite.
 2. Compute a safe read window such as `last_successful_poll - lookback_window`.
 3. Enumerate only the repositories managed by Symphony.
-4. Enumerate only the open pull requests Symphony already manages, or another equivalently narrow managed-PR set.
+4. Enumerate only the open pull requests Symphony already manages, and when a repository configures `SYMPHONY_REPO_<ID>_PR_MONITOR_LABEL`, restrict that set further to pull requests that currently carry the configured label.
 5. Read issue comments that are new within the polling window.
-6. Ignore comments on non-Symphony pull requests.
+6. Ignore comments on non-Symphony pull requests, and ignore unlabeled pull requests when label-scoped monitoring is configured for that repository.
 7. Ignore comment edits in v1.
 8. Dedupe every candidate command by stable comment ID or node ID before starting work.
 9. Authorize the commenter before running any mutation workflow.
@@ -240,11 +252,12 @@ After Symphony is running:
 1. Confirm the host has outbound HTTPS access to GitHub.
 2. Confirm there is no dependency on public inbound GitHub webhook traffic.
 3. Create or reuse a Symphony-managed pull request.
-4. Add a test comment such as `/symphony status` from an allowed GitHub user.
-5. Wait one or two poll intervals.
-6. Confirm Symphony detects the comment and posts its response or audit-visible result.
-7. Add a second command such as `/symphony refine Clarify rollback behavior.` and verify it is also detected after polling.
-8. Confirm the same comment is not executed twice if the polling windows overlap.
+4. If `SYMPHONY_REPO_<ID>_PR_MONITOR_LABEL` is configured, confirm the repository label exists and the pull request carries it.
+5. Add a test comment such as `/symphony status` from an allowed GitHub user.
+6. Wait one or two poll intervals.
+7. Confirm Symphony detects the comment and posts its response or audit-visible result.
+8. Add a second command such as `/symphony refine Clarify rollback behavior.` and verify it is also detected after polling.
+9. Confirm the same comment is not executed twice if the polling windows overlap.
 
 If end-to-end verification fails, check these first:
 
@@ -252,6 +265,7 @@ If end-to-end verification fails, check these first:
 - the GitHub App private key path is correct and readable
 - the installation ID is correct
 - the polling interval and lookback window are configured
+- the configured PR monitor label exists and is attached to the Symphony pull request if label-scoped monitoring is enabled
 - the repository is actually managed by Symphony routing
 - the commenting user is in the allowed-user set
 - the test pull request is a Symphony-managed pull request, not an unrelated PR
@@ -265,6 +279,7 @@ For each managed repository, verify:
 - `main` is the intended base branch
 - the repo accepts pull requests from `symphony/*` branches
 - the repo appears in `SYMPHONY_REPOS`
+- `SYMPHONY_REPO_<ID>_PR_MONITOR_LABEL` is set if you want label-scoped PR monitoring for that repository
 - `SYMPHONY_REPO_<ID>_ALLOWED_USERS` contains the operators who may run commands
 - `SYMPHONY_REPO_<ID>_ALLOWED_AGENTS` contains the agent names permitted for `/opsx-apply`
 - the GitHub polling interval and lookback semantics are configured for that deployment
@@ -273,9 +288,11 @@ For each managed repository, verify:
 
 - No public GitHub webhook endpoint is required in this setup model.
 - PR comments still live under GitHub's issue-comment model even when you do not use webhooks.
+- GitHub's PR comment and PR label APIs use issues-style endpoints, but GitHub App `Pull requests` permission is sufficient for Symphony's current PR-only flow.
 - Polling introduces intentional delay; the user-visible delay is usually one poll interval plus processing time.
 - The overlap or lookback window must be larger than zero, or restart and clock-skew gaps can drop commands.
 - Dedupe by comment identity, not only by `created_at`, or the same command can run twice.
+- If label-scoped monitoring is enabled for a repository, removing the monitor label from a Symphony pull request can cause polling to ignore that pull request until reconciliation adds the label back.
 - Installing the app on the organization is not enough if it is not granted access to the target repositories.
 - The GitHub App private key remains a critical recovery asset even though the webhook secret is gone.
 - Symphony should only process mutation commands on pull requests that it created or explicitly adopted.

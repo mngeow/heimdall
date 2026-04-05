@@ -38,3 +38,16 @@ Feature: Runtime configuration
       Given a project root with a Symphony .env file missing the Linear project name
       When Symphony loads configuration from that project root
       Then configuration loading should fail with "SYMPHONY_LINEAR_PROJECT_NAME"
+
+    Scenario: Repository config can declare a PR monitor label
+      Given a project root with a valid Symphony .env file
+      And the environment overrides "SYMPHONY_REPO_PLATFORM_PR_MONITOR_LABEL" with "symphony-monitored"
+      When Symphony loads configuration from that project root
+      Then configuration loading should succeed
+      And the loaded repository "github.com/acme/platform" should use PR monitor label "symphony-monitored"
+
+    Scenario: Empty PR monitor label is rejected when set
+      Given a project root with a valid Symphony .env file
+      And the environment overrides "SYMPHONY_REPO_PLATFORM_PR_MONITOR_LABEL" with "   "
+      When Symphony loads configuration from that project root
+      Then configuration loading should fail with "SYMPHONY_REPO_PLATFORM_PR_MONITOR_LABEL"

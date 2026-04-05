@@ -65,6 +65,7 @@ type RepoConfig struct {
 	LocalMirrorPath string   `env:"LOCAL_MIRROR_PATH,required,notEmpty"`
 	DefaultBranch   string   `env:"DEFAULT_BRANCH" envDefault:"main"`
 	BranchPrefix    string   `env:"BRANCH_PREFIX" envDefault:"symphony"`
+	PRMonitorLabel  string   `env:"PR_MONITOR_LABEL"`
 	LinearTeamKeys  []string `env:"LINEAR_TEAM_KEYS" envSeparator:","`
 	AllowedAgents   []string `env:"ALLOWED_AGENTS,required" envSeparator:","`
 	AllowedUsers    []string `env:"ALLOWED_USERS,required" envSeparator:","`
@@ -254,12 +255,16 @@ func loadRepoConfig(environment map[string]string, repoID string) (RepoConfig, e
 	if err != nil {
 		return RepoConfig{}, fmt.Errorf("failed to parse repository %s configuration: %w", repoID, err)
 	}
+	if rawMonitorLabel, ok := environment[repoEnvPrefix(repoID)+"PR_MONITOR_LABEL"]; ok && strings.TrimSpace(rawMonitorLabel) == "" {
+		return RepoConfig{}, fmt.Errorf("SYMPHONY_REPO_%s_PR_MONITOR_LABEL must not be empty when set", repoID)
+	}
 
 	repoConfig.ID = repoID
 	repoConfig.Name = strings.TrimSpace(repoConfig.Name)
 	repoConfig.LocalMirrorPath = strings.TrimSpace(repoConfig.LocalMirrorPath)
 	repoConfig.DefaultBranch = strings.TrimSpace(repoConfig.DefaultBranch)
 	repoConfig.BranchPrefix = strings.TrimSpace(repoConfig.BranchPrefix)
+	repoConfig.PRMonitorLabel = strings.TrimSpace(repoConfig.PRMonitorLabel)
 	repoConfig.LinearTeamKeys = trimNonEmpty(repoConfig.LinearTeamKeys)
 	repoConfig.AllowedAgents = trimNonEmpty(repoConfig.AllowedAgents)
 	repoConfig.AllowedUsers = trimNonEmpty(repoConfig.AllowedUsers)
