@@ -1,0 +1,32 @@
+version = 1
+install_mode = "copy"
+skills_source_root = "/Users/mngeow/Projects/hermes/repo"
+agents_source_root = "/Users/mngeow/Projects/hermes/agents"
+skills = []
+
+[[agents]]
+name = "backend-software-architect"
+description = "Designs backend systems and produces implementation-ready architecture documentation"
+mode = "primary"
+source_rel_path = "backend-software-architect.md"
+installed_rel_path = "agents/backend-software-architect.md"
+source_hash = "sha256:b5ed7c3ffedc82100f721cc898e2731a184e1103847827c2aef191704d1f1f23"
+installed_hash = "sha256:b5ed7c3ffedc82100f721cc898e2731a184e1103847827c2aef191704d1f1f23"
+
+[[agents]]
+name = "opsx-code-writer"
+description = "Implements OpenSpec-defined changes for /opsx-apply and keeps task progress current"
+mode = "primary"
+source_rel_path = "opsx-code-writer.md"
+installed_rel_path = "agents/opsx-code-writer.md"
+source_hash = "sha256:58d437e92d231b09e08ac861b7f016ae82bb8d9dacfbc3a09a993350e242676f"
+installed_hash = "sha256:58d437e92d231b09e08ac861b7f016ae82bb8d9dacfbc3a09a993350e242676f"
+
+[[agents]]
+name = "opsx-spec-writer"
+description = "Creates OpenSpec change artifacts for /opsx-propose and gets them ready for /opsx-apply"
+mode = "primary"
+source_rel_path = "opsx-spec-writer.md"
+installed_rel_path = "agents/opsx-spec-writer.md"
+source_hash = "sha256:f4fc599166e391b2e04682e41405f0e55e29bb802972baa30a498625d2975862"
+installed_hash = "sha256:f4fc599166e391b2e04682e41405f0e55e29bb802972baa30a498625d2975862"
