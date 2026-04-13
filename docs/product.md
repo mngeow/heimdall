@@ -11,23 +11,23 @@ Harness engineering work often starts as a kanban ticket, but the path from tick
 - opening a pull request
 - iterating on the spec before implementation starts
 
-Symphony exists to remove that setup work while keeping the engineer in control of the final plan and implementation.
+Heimdall exists to remove that setup work while keeping the engineer in control of the final plan and implementation.
 
 ## Desired User Experience
 
 The happy path for V1 is intentionally small:
 
 1. A Linear issue is moved into the configured active state.
-2. Symphony detects that transition during polling.
-3. Symphony creates a branch in the configured GitHub repository.
-4. Symphony creates a small bootstrap file change from the Linear issue title and description.
-5. Symphony commits that bootstrap change and opens a pull request against `main`.
-6. The bootstrap PR proves the activation-to-PR path before Symphony later swaps that temporary file change for OpenSpec proposal generation.
-7. The engineer refines the spec from GitHub comments, which Symphony discovers during polling.
+2. Heimdall detects that transition during polling.
+3. Heimdall creates a branch in the configured GitHub repository.
+4. Heimdall creates a small bootstrap file change from the Linear issue title and description.
+5. Heimdall commits that bootstrap change and opens a pull request against `main`.
+6. The bootstrap PR proves the activation-to-PR path before Heimdall later swaps that temporary file change for OpenSpec proposal generation.
+7. The engineer refines the spec from GitHub comments, which Heimdall discovers during polling.
 8. When ready, the engineer triggers `/opsx-apply` from the PR with an allowed agent.
-9. Symphony commits the resulting changes back to the same branch.
+9. Heimdall commits the resulting changes back to the same branch.
 
-The user should not need a separate Symphony UI in V1.
+The user should not need a separate Heimdall UI in V1.
 
 ## Ease Of Use Decisions
 
@@ -55,7 +55,7 @@ To keep V1 easy to operate and easy to adopt, the design makes these choices:
 - multi-tenant hosted SaaS
 - a custom browser UI for workflow control
 - automatic merge or automatic deployment after PR creation
-- deep project-management features inside Symphony
+- deep project-management features inside Heimdall
 - real-time Linear or GitHub webhooks in the first release
 - arbitrary shell access from GitHub comments
 
@@ -63,13 +63,13 @@ To keep V1 easy to operate and easy to adopt, the design makes these choices:
 
 These defaults keep the product predictable and easy to reason about:
 
-- Branch name: `symphony/<issue-key>-<description-or-title-slug>`
-- Bootstrap file: `.symphony/bootstrap/<issue-key>.md`
+- Branch name: `heimdall/<issue-key>-<description-or-title-slug>`
+- Bootstrap file: `.heimdall/bootstrap/<issue-key>.md`
 - PR title: `[<issue-key>] Bootstrap PR for <issue title>`
-- Initial bootstrap commit message: `docs: bootstrap <issue-key> via symphony`
+- Initial bootstrap commit message: `docs: bootstrap <issue-key> via heimdall`
 - No-change bootstrap result: fail the workflow as blocked and log the reason instead of opening an empty PR
 - Refinement commit message: `docs(openspec): refine <change-name>`
-- Apply commit message: `feat: implement <change-name> via symphony`
+- Apply commit message: `feat: implement <change-name> via heimdall`
 
 ## Activation Bootstrap Logging
 
@@ -91,10 +91,10 @@ Logs must stay redacted enough to avoid exposing installation tokens or raw boot
 
 V1 should be opinionated about repository routing:
 
-- If only one repository is configured, Symphony uses it automatically.
+- If only one repository is configured, Heimdall uses it automatically.
 - If multiple repositories are configured, routing should be based on explicit config rules.
 - The first routing rules should be simple: Linear team, project, or label matches.
-- If no routing rule matches, Symphony should fail clearly and comment on the failure instead of guessing.
+- If no routing rule matches, Heimdall should fail clearly and comment on the failure instead of guessing.
 
 ## Human Control Points
 

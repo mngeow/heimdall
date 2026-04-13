@@ -92,7 +92,7 @@ func TestStore(t *testing.T) {
 			Owner:           "test",
 			Name:            "repo",
 			DefaultBranch:   "main",
-			LocalMirrorPath: "/var/lib/symphony/repos/github.com/test/repo.git",
+			LocalMirrorPath: "/var/lib/heimdall/repos/github.com/test/repo.git",
 			IsActive:        true,
 		}
 
@@ -122,9 +122,9 @@ func TestStore(t *testing.T) {
 			Owner:           "test",
 			Name:            "monitored",
 			DefaultBranch:   "main",
-			BranchPrefix:    "symphony",
-			PRMonitorLabel:  "symphony-monitored",
-			LocalMirrorPath: "/var/lib/symphony/repos/github.com/test/monitored.git",
+			BranchPrefix:    "heimdall",
+			PRMonitorLabel:  "heimdall-monitored",
+			LocalMirrorPath: "/var/lib/heimdall/repos/github.com/test/monitored.git",
 			IsActive:        true,
 		}
 
@@ -138,7 +138,7 @@ func TestStore(t *testing.T) {
 		}
 		if retrieved == nil {
 			t.Error("expected repository, got nil")
-		} else if retrieved.PRMonitorLabel != "symphony-monitored" {
+		} else if retrieved.PRMonitorLabel != "heimdall-monitored" {
 			t.Errorf("expected PR monitor label to round-trip, got %q", retrieved.PRMonitorLabel)
 		}
 	})
@@ -162,7 +162,7 @@ func TestWorkflowRunStatusReason(t *testing.T) {
 		Owner:           "test",
 		Name:            "repo",
 		DefaultBranch:   "main",
-		BranchPrefix:    "symphony",
+		BranchPrefix:    "heimdall",
 		LocalMirrorPath: "/tmp/test-repo.git",
 		IsActive:        true,
 	}); err != nil {
@@ -191,7 +191,7 @@ func TestWorkflowRunStatusReason(t *testing.T) {
 		RunType:         "bootstrap_pull_request",
 		Status:          "queued",
 		ChangeName:      "ENG-123-test-issue",
-		BranchName:      "symphony/ENG-123-test-issue",
+		BranchName:      "heimdall/ENG-123-test-issue",
 		WorktreePath:    "/tmp/worktree",
 		RequestedByType: "system",
 	}

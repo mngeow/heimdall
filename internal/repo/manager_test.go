@@ -29,8 +29,8 @@ func TestCreateWorktreeFromConfiguredMirror(t *testing.T) {
 	runGit(t, ctx, tempDir, "clone", "--mirror", sourcePath, mirrorPath)
 
 	manager := NewManager("")
-	worktreePath := filepath.Join(tempDir, "worktrees", "symphony-ENG-123-add-rate-limiting")
-	if err := manager.CreateWorktree(ctx, mirrorPath, "main", "symphony/ENG-123-add-rate-limiting", worktreePath); err != nil {
+	worktreePath := filepath.Join(tempDir, "worktrees", "heimdall-ENG-123-add-rate-limiting")
+	if err := manager.CreateWorktree(ctx, mirrorPath, "main", "heimdall/ENG-123-add-rate-limiting", worktreePath); err != nil {
 		t.Fatalf("CreateWorktree() error = %v", err)
 	}
 
@@ -42,7 +42,7 @@ func TestCreateWorktreeFromConfiguredMirror(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCurrentBranch() error = %v", err)
 	}
-	if branch != "symphony/ENG-123-add-rate-limiting" {
+	if branch != "heimdall/ENG-123-add-rate-limiting" {
 		t.Fatalf("expected bootstrap branch, got %q", branch)
 	}
 }

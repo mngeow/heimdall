@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mngeow/symphony/internal/board/linear"
-	"github.com/mngeow/symphony/internal/config"
-	"github.com/mngeow/symphony/internal/store"
-	"github.com/mngeow/symphony/internal/workflow"
+	"github.com/mngeow/heimdall/internal/board/linear"
+	"github.com/mngeow/heimdall/internal/config"
+	"github.com/mngeow/heimdall/internal/store"
+	"github.com/mngeow/heimdall/internal/workflow"
 )
 
 type stubActivationFlow struct {
@@ -45,11 +45,11 @@ func TestPollLinearOnceCreatesBootstrapWorkflowRun(t *testing.T) {
 		},
 		Repos: []config.RepoConfig{{
 			Name:            "github.com/acme/platform",
-			LocalMirrorPath: "/var/lib/symphony/repos/github.com/acme/platform.git",
+			LocalMirrorPath: "/var/lib/heimdall/repos/github.com/acme/platform.git",
 			AllowedAgents:   []string{"gpt-5.4"},
 			AllowedUsers:    []string{"mngeow"},
 			DefaultBranch:   "main",
-			BranchPrefix:    "symphony",
+			BranchPrefix:    "heimdall",
 		}},
 	}
 	if err := syncConfiguredRepositories(ctx, runtimeStore, cfg.Repos); err != nil {
@@ -100,7 +100,7 @@ func TestPollLinearOnceCreatesBootstrapWorkflowRun(t *testing.T) {
 	if run.RunType != "bootstrap_pull_request" {
 		t.Fatalf("expected bootstrap run type, got %q", run.RunType)
 	}
-	if run.BranchName != "symphony/ENG-123-more-details" {
+	if run.BranchName != "heimdall/ENG-123-more-details" {
 		t.Fatalf("expected description-seeded branch, got %q", run.BranchName)
 	}
 }

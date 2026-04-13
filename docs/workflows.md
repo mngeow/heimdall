@@ -2,7 +2,7 @@
 
 ## Workflow 1: Linear Issue Enters Active State
 
-Because V1 uses polling, Symphony must detect transitions rather than rely on event delivery from Linear.
+Because V1 uses polling, Heimdall must detect transitions rather than rely on event delivery from Linear.
 
 Recommended polling strategy:
 
@@ -37,11 +37,11 @@ Detailed flow:
 
 1. Resolve the target repository.
 2. Reconcile whether a branch or PR already exists for this issue.
-3. Create or reuse branch `symphony/<issue-key>-<description-or-title-slug>`.
-4. Ensure the configured bare mirror exists at `SYMPHONY_REPO_<id>_LOCAL_MIRROR_PATH`.
+3. Create or reuse branch `heimdall/<issue-key>-<description-or-title-slug>`.
+4. Ensure the configured bare mirror exists at `HEIMDALL_REPO_<id>_LOCAL_MIRROR_PATH`.
 5. Create a worktree from that mirror for the bootstrap branch.
 6. Run local `opencode` with the fixed activation bootstrap profile of the `general` agent and model `gpt-5.4`.
-7. Ask OpenCode to create or update `.symphony/bootstrap/<issue-key>.md` as the intentionally small bootstrap file change.
+7. Ask OpenCode to create or update `.heimdall/bootstrap/<issue-key>.md` as the intentionally small bootstrap file change.
 8. Fail the workflow as blocked if the bootstrap run leaves no repository changes.
 9. Commit the bootstrap file change.
 10. Push the branch by using a GitHub App installation token.
@@ -57,20 +57,20 @@ In V1, refinement should use the repository's configured default spec-writing ag
 Recommended command:
 
 ```text
-/symphony refine Clarify rollback behavior and add non-goals.
+/heimdall refine Clarify rollback behavior and add non-goals.
 ```
 
 Processing steps:
 
-1. A GitHub poll cycle observes a new issue comment on a Symphony-managed pull request.
-2. Symphony checks that the comment is on a PR, not a plain issue.
-3. Symphony checks that the commenter is allowed to issue commands.
-4. Symphony deduplicates the command by comment node id or another stable comment identity.
-5. Symphony resolves the branch and associated OpenSpec change.
-6. Symphony runs the refinement executor against the worktree.
-7. Symphony commits any changed artifacts.
-8. Symphony pushes the branch.
-9. Symphony comments with a short summary of what changed.
+1. A GitHub poll cycle observes a new issue comment on a Heimdall-managed pull request.
+2. Heimdall checks that the comment is on a PR, not a plain issue.
+3. Heimdall checks that the commenter is allowed to issue commands.
+4. Heimdall deduplicates the command by comment node id or another stable comment identity.
+5. Heimdall resolves the branch and associated OpenSpec change.
+6. Heimdall runs the refinement executor against the worktree.
+7. Heimdall commits any changed artifacts.
+8. Heimdall pushes the branch.
+9. Heimdall comments with a short summary of what changed.
 
 Refinement should be scoped to:
 
@@ -100,7 +100,7 @@ Examples:
 
 Processing steps:
 
-1. A GitHub poll cycle observes the command comment on a Symphony-managed pull request.
+1. A GitHub poll cycle observes the command comment on a Heimdall-managed pull request.
 2. Authorize the actor and parse the requested agent.
 3. Check that the agent is allowed for the repository.
 4. Resolve the branch and worktree for the PR.
@@ -121,7 +121,7 @@ Recommended command:
 /opsx-archive <change-name>
 ```
 
-If archive is implemented later, Symphony should follow the OpenSpec guardrails already present in the repo:
+If archive is implemented later, Heimdall should follow the OpenSpec guardrails already present in the repo:
 
 - never guess the change when multiple are active
 - warn about incomplete artifacts
@@ -132,14 +132,14 @@ If archive is implemented later, Symphony should follow the OpenSpec guardrails 
 
 The initial command surface should stay small:
 
-- `/symphony status`
-- `/symphony refine <instruction>`
+- `/heimdall status`
+- `/heimdall refine <instruction>`
 - `/opsx-apply [change-name] --agent <agent-name>`
 - `/opsx-archive [change-name]`
 
 Notes:
 
-- `/symphony refine` is a Symphony-native command because refinement is broader than a single stock OpenSpec command.
+- `/heimdall refine` is a Heimdall-native command because refinement is broader than a single stock OpenSpec command.
 - `/opsx-apply` and `/opsx-archive` keep the OpenSpec mental model visible to the user.
 - comment edits should be ignored in V1; only initial comment creation should trigger execution.
 
@@ -147,7 +147,7 @@ Notes:
 
 Idempotency is critical because overlapping polling windows and retries both happen in real systems.
 
-Symphony should dedupe at these boundaries:
+Heimdall should dedupe at these boundaries:
 
 - Linear transition detection
 - branch and PR creation
@@ -183,4 +183,4 @@ Failure behavior should be consistent:
 - record the failure in SQLite
 - retry transient failures with backoff
 - post a short PR comment for permanent failures that the user can act on
-- never leave the user guessing whether Symphony saw the request
+- never leave the user guessing whether Heimdall saw the request

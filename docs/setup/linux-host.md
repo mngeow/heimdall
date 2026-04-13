@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This document lists the Linux-side dependencies Symphony needs and the host preparation steps required before GitHub and Linear integration will work.
+This document lists the Linux-side dependencies Heimdall needs and the host preparation steps required before GitHub and Linear integration will work.
 
 ## Required Runtime Dependencies
 
-Symphony should run as a single compiled Go binary, but the host still needs these external dependencies:
+Heimdall should run as a single compiled Go binary, but the host still needs these external dependencies:
 
 - `git`
 - `openspec`
@@ -17,7 +17,7 @@ Symphony should run as a single compiled Go binary, but the host still needs the
 
 ## Optional But Recommended Operator Tools
 
-These are not runtime requirements for Symphony itself, but they make troubleshooting much easier:
+These are not runtime requirements for Heimdall itself, but they make troubleshooting much easier:
 
 - `sqlite3`
 - `jq`
@@ -26,7 +26,7 @@ These are not runtime requirements for Symphony itself, but they make troublesho
 
 ## Not Required
 
-These should not be required on the production host if Symphony is shipped as a compiled binary:
+These should not be required on the production host if Heimdall is shipped as a compiled binary:
 
 - a Go toolchain
 - a separate database server
@@ -38,13 +38,13 @@ These should not be required on the production host if Symphony is shipped as a 
 
 ```mermaid
 flowchart TB
-    Host["Linux host"] --> Project["/opt/symphony/"]
-    Host --> Etc["/etc/symphony/"]
-    Host --> VarLib["/var/lib/symphony/"]
-    Host --> VarLog["/var/log/symphony/"]
+    Host["Linux host"] --> Project["/opt/heimdall/"]
+    Host --> Etc["/etc/heimdall/"]
+    Host --> VarLib["/var/lib/heimdall/"]
+    Host --> VarLog["/var/log/heimdall/"]
     Project --> Config[".env"]
     Etc --> Key["github-app.pem"]
-    VarLib --> State["state/symphony.db"]
+    VarLib --> State["state/heimdall.db"]
     VarLib --> Repos["repos/github.com/<owner>/<repo>.git"]
     VarLib --> Worktrees["worktrees/<provider>/<issue-key>/"]
     VarLog --> Logs["optional forwarded log files"]
@@ -52,12 +52,12 @@ flowchart TB
 
 ## Service Account Expectations
 
-The Symphony service account should be able to:
+The Heimdall service account should be able to:
 
 - read the project-root `.env`
 - read the GitHub App private key file if stored separately
 - read environment variables injected by the service manager when they override `.env`
-- create and modify files under `/var/lib/symphony/`
+- create and modify files under `/var/lib/heimdall/`
 - execute `git`, `openspec`, and `opencode`
 - open outbound HTTPS connections to GitHub and Linear
 
@@ -81,11 +81,11 @@ Both provider integrations are polling-based in v1, so outbound HTTPS is the cri
 
 `git` and `ca-certificates` should come from the Linux distribution packages.
 
-`openspec` and `opencode` should be installed according to their upstream installation instructions and verified on the service account's `PATH` before Symphony is started.
+`openspec` and `opencode` should be installed according to their upstream installation instructions and verified on the service account's `PATH` before Heimdall is started.
 
 ## Verification Commands
 
-Before starting Symphony, verify these commands work under the intended service account:
+Before starting Heimdall, verify these commands work under the intended service account:
 
 ```bash
 git --version
@@ -97,8 +97,8 @@ opencode --version
 
 1. Create the service account.
 2. Install `git`, `openspec`, `opencode`, and CA certificates.
-3. Create the Symphony project root, `/etc/symphony/`, `/var/lib/symphony/`, and `/var/log/symphony/`.
+3. Create the Heimdall project root, `/etc/heimdall/`, `/var/lib/heimdall/`, and `/var/log/heimdall/`.
 4. Copy `dist.env` to `.env` in the project root and place any referenced secret files.
 5. Confirm outbound HTTPS works to GitHub and Linear.
 6. Confirm the system clock is synchronized.
-7. Start Symphony with `systemd`.
+7. Start Heimdall with `systemd`.

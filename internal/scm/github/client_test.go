@@ -52,7 +52,7 @@ func TestListIssueCommentsSince(t *testing.T) {
 				t.Fatalf("expected updated sort, got %q", r.URL.Query().Get("sort"))
 			}
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`[{"id":101,"node_id":"IC_101","body":"/symphony status"}]`))
+			w.Write([]byte(`[{"id":101,"node_id":"IC_101","body":"/heimdall status"}]`))
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -79,7 +79,7 @@ func TestFindOpenPullRequestByHead(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"token":"installation-token"}`))
 		case "/repos/acme/platform/pulls":
-			if got := r.URL.Query().Get("head"); got != "acme:symphony/ENG-123-add-rate-limiting" {
+			if got := r.URL.Query().Get("head"); got != "acme:heimdall/ENG-123-add-rate-limiting" {
 				t.Fatalf("expected head query, got %q", got)
 			}
 			if got := r.URL.Query().Get("base"); got != "main" {
@@ -97,7 +97,7 @@ func TestFindOpenPullRequestByHead(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(t, server)
-	pullRequest, err := client.FindOpenPullRequestByHead(t.Context(), "acme", "platform", "symphony/ENG-123-add-rate-limiting", "main")
+	pullRequest, err := client.FindOpenPullRequestByHead(t.Context(), "acme", "platform", "heimdall/ENG-123-add-rate-limiting", "main")
 	if err != nil {
 		t.Fatalf("FindOpenPullRequestByHead() error = %v", err)
 	}
@@ -112,7 +112,7 @@ func TestEnsurePRMonitorLabelCreatesMissingLabel(t *testing.T) {
 		case "/app/installations/42/access_tokens":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = io.WriteString(w, `{"token":"installation-token"}`)
-		case "/repos/acme/platform/labels/symphony-monitored":
+		case "/repos/acme/platform/labels/heimdall-monitored":
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = io.WriteString(w, `{"message":"Not Found"}`)
 		case "/repos/acme/platform/labels":
@@ -123,11 +123,11 @@ func TestEnsurePRMonitorLabelCreatesMissingLabel(t *testing.T) {
 			if err != nil {
 				t.Fatalf("io.ReadAll() error = %v", err)
 			}
-			if !strings.Contains(string(body), `"name":"symphony-monitored"`) {
+			if !strings.Contains(string(body), `"name":"heimdall-monitored"`) {
 				t.Fatalf("expected label create payload, got %s", body)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, `{"name":"symphony-monitored"}`)
+			_, _ = io.WriteString(w, `{"name":"heimdall-monitored"}`)
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -135,7 +135,7 @@ func TestEnsurePRMonitorLabelCreatesMissingLabel(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(t, server)
-	if err := client.EnsurePRMonitorLabel(t.Context(), "acme", "platform", "symphony-monitored"); err != nil {
+	if err := client.EnsurePRMonitorLabel(t.Context(), "acme", "platform", "heimdall-monitored"); err != nil {
 		t.Fatalf("EnsurePRMonitorLabel() error = %v", err)
 	}
 }
@@ -147,9 +147,9 @@ func TestEnsurePRMonitorLabelReusesExistingLabel(t *testing.T) {
 		case "/app/installations/42/access_tokens":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = io.WriteString(w, `{"token":"installation-token"}`)
-		case "/repos/acme/platform/labels/symphony-monitored":
+		case "/repos/acme/platform/labels/heimdall-monitored":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, `{"name":"symphony-monitored"}`)
+			_, _ = io.WriteString(w, `{"name":"heimdall-monitored"}`)
 		case "/repos/acme/platform/labels":
 			createCalled = true
 			w.WriteHeader(http.StatusCreated)
@@ -160,7 +160,7 @@ func TestEnsurePRMonitorLabelReusesExistingLabel(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(t, server)
-	if err := client.EnsurePRMonitorLabel(t.Context(), "acme", "platform", "symphony-monitored"); err != nil {
+	if err := client.EnsurePRMonitorLabel(t.Context(), "acme", "platform", "heimdall-monitored"); err != nil {
 		t.Fatalf("EnsurePRMonitorLabel() error = %v", err)
 	}
 	if createCalled {
@@ -182,11 +182,11 @@ func TestAddPRMonitorLabelAddsLabelToPullRequest(t *testing.T) {
 			if err != nil {
 				t.Fatalf("io.ReadAll() error = %v", err)
 			}
-			if !strings.Contains(string(body), "symphony-monitored") {
+			if !strings.Contains(string(body), "heimdall-monitored") {
 				t.Fatalf("expected label add payload, got %s", body)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, `[{"name":"symphony-monitored"}]`)
+			_, _ = io.WriteString(w, `[{"name":"heimdall-monitored"}]`)
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -194,7 +194,7 @@ func TestAddPRMonitorLabelAddsLabelToPullRequest(t *testing.T) {
 	defer server.Close()
 
 	client := newTestClient(t, server)
-	if err := client.AddPRMonitorLabel(t.Context(), "acme", "platform", 42, "symphony-monitored"); err != nil {
+	if err := client.AddPRMonitorLabel(t.Context(), "acme", "platform", 42, "heimdall-monitored"); err != nil {
 		t.Fatalf("AddPRMonitorLabel() error = %v", err)
 	}
 }

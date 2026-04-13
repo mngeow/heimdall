@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
-	"github.com/mngeow/symphony/internal/board/linear"
-	"github.com/mngeow/symphony/internal/store"
+	"github.com/mngeow/heimdall/internal/board/linear"
+	"github.com/mngeow/heimdall/internal/store"
 )
 
 var linearPollTime = time.Date(2026, time.April, 5, 10, 0, 0, 0, time.UTC)
@@ -31,8 +31,8 @@ func registerLinearPollingSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^a Linear GraphQL server with a rate-limited response$`, linearServerRateLimited)
 	sc.Step(`^an existing Linear poll checkpoint$`, existingLinearPollCheckpoint)
 	sc.Step(`^an existing inactive snapshot for issue "([^"]*)"$`, existingInactiveSnapshotForIssue)
-	sc.Step(`^Symphony polls Linear through the board provider$`, symphonyPollsLinearThroughBoardProvider)
-	sc.Step(`^Symphony processes the same Linear poll result again$`, symphonyProcessesSameLinearPollResultAgain)
+	sc.Step(`^Heimdall polls Linear through the board provider$`, heimdallPollsLinearThroughBoardProvider)
+	sc.Step(`^Heimdall processes the same Linear poll result again$`, heimdallProcessesSameLinearPollResultAgain)
 	sc.Step(`^the Linear poll should succeed$`, linearPollShouldSucceed)
 	sc.Step(`^the Linear poll should fail with "([^"]*)"$`, linearPollShouldFailWith)
 	sc.Step(`^the board provider should scope requests to the configured project name$`, boardProviderShouldScopeRequestsToProject)
@@ -109,7 +109,7 @@ func existingInactiveSnapshotForIssue(ctx context.Context, issueKey string) erro
 	})
 }
 
-func symphonyPollsLinearThroughBoardProvider(ctx context.Context) error {
+func heimdallPollsLinearThroughBoardProvider(ctx context.Context) error {
 	tc := getTC(ctx)
 	tc.linearActivated = nil
 	tc.linearPollResult, tc.linearPollErr = tcLinearProvider(tc).Poll(ctx)
@@ -120,7 +120,7 @@ func symphonyPollsLinearThroughBoardProvider(ctx context.Context) error {
 	return nil
 }
 
-func symphonyProcessesSameLinearPollResultAgain(ctx context.Context) error {
+func heimdallProcessesSameLinearPollResultAgain(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.linearPollResult == nil {
 		return fmt.Errorf("expected a prior Linear poll result")
@@ -225,7 +225,7 @@ func boardProviderShouldNotEmitDuplicateEnteredActiveState(ctx context.Context) 
 
 func startLinearServer(tc *testContext, responses []linearServerResponse) error {
 	if tc.config == nil {
-		return fmt.Errorf("expected Symphony config before starting Linear server")
+		return fmt.Errorf("expected Heimdall config before starting Linear server")
 	}
 	if tc.linearCleanup != nil {
 		tc.linearCleanup()

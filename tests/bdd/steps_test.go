@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
-	"github.com/mngeow/symphony/internal/board/linear"
-	"github.com/mngeow/symphony/internal/config"
-	"github.com/mngeow/symphony/internal/slashcmd"
-	"github.com/mngeow/symphony/internal/store"
-	"github.com/mngeow/symphony/internal/workflow"
+	"github.com/mngeow/heimdall/internal/board/linear"
+	"github.com/mngeow/heimdall/internal/config"
+	"github.com/mngeow/heimdall/internal/slashcmd"
+	"github.com/mngeow/heimdall/internal/store"
+	"github.com/mngeow/heimdall/internal/workflow"
 )
 
 // testContext holds the state for each scenario
@@ -100,7 +100,7 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 			parser:        slashcmd.NewParser(nil),
 			pendingActor:  "testuser",
 			publicWebhook: false,
-			envSnapshot:   snapshotSymphonyEnv(),
+			envSnapshot:   snapshotHeimdallEnv(),
 		}
 		return context.WithValue(ctx, ctxKey{}, tc), nil
 	})
@@ -116,18 +116,18 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		if tc.linearCleanup != nil {
 			tc.linearCleanup()
 		}
-		restoreSymphonyEnv(tc.envSnapshot)
+		restoreHeimdallEnv(tc.envSnapshot)
 		return ctx, nil
 	})
 
 	// Background steps
-	sc.Step(`^Symphony is configured with a Linear team and GitHub repository$`, symphonyIsConfigured)
-	sc.Step(`^Symphony is configured with a Linear project and GitHub repository$`, symphonyIsConfigured)
-	sc.Step(`^Symphony is configured with GitHub polling$`, symphonyIsConfigured)
+	sc.Step(`^Heimdall is configured with a Linear team and GitHub repository$`, heimdallIsConfigured)
+	sc.Step(`^Heimdall is configured with a Linear project and GitHub repository$`, heimdallIsConfigured)
+	sc.Step(`^Heimdall is configured with GitHub polling$`, heimdallIsConfigured)
 	sc.Step(`^the required local executables are available$`, executablesAreAvailable)
-	sc.Step(`^a Symphony-managed pull request exists$`, symphonyManagedPRExists)
+	sc.Step(`^a Heimdall-managed pull request exists$`, heimdallManagedPRExists)
 	sc.Step(`^the PR author is in the allowed users list$`, authorIsAllowed)
-	sc.Step(`^Symphony is running with security configuration$`, symphonyIsConfigured)
+	sc.Step(`^Heimdall is running with security configuration$`, heimdallIsConfigured)
 
 	// Proposal creation steps
 	sc.Step(`^a Linear issue "([^"]*)" with title "([^"]*)" exists$`, linearIssueExists)
@@ -135,74 +135,74 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^a Linear issue "([^"]*)" with title "([^"]*)"$`, aLinearIssueWithTitle)
 	sc.Step(`^the issue is in state "([^"]*)"$`, issueIsInState)
 	sc.Step(`^the issue is moved to state "([^"]*)"$`, issueIsMovedToState)
-	sc.Step(`^Symphony polls Linear$`, symphonyPollsLinear)
-	sc.Step(`^Symphony should detect the state transition$`, symphonyShouldDetectTransition)
-	sc.Step(`^Symphony should create a workflow run for proposal generation$`, symphonyShouldCreateWorkflowRun)
-	sc.Step(`^Symphony should create a workflow run for bootstrap pull request creation$`, symphonyShouldCreateWorkflowRun)
+	sc.Step(`^Heimdall polls Linear$`, heimdallPollsLinear)
+	sc.Step(`^Heimdall should detect the state transition$`, heimdallShouldDetectTransition)
+	sc.Step(`^Heimdall should create a workflow run for proposal generation$`, heimdallShouldCreateWorkflowRun)
+	sc.Step(`^Heimdall should create a workflow run for bootstrap pull request creation$`, heimdallShouldCreateWorkflowRun)
 	sc.Step(`^a Linear issue "([^"]*)" is already in state "([^"]*)"$`, linearIssueExistsInState)
 	sc.Step(`^a proposal branch already exists for the issue$`, proposalBranchExists)
 	sc.Step(`^a bootstrap branch already exists for the issue$`, proposalBranchExists)
-	sc.Step(`^Symphony polls Linear again$`, symphonyPollsLinear)
-	sc.Step(`^Symphony should not create a duplicate workflow run$`, symphonyShouldNotCreateDuplicate)
-	sc.Step(`^Symphony should reuse the existing proposal$`, symphonyShouldReuseExisting)
-	sc.Step(`^Symphony should reuse the existing bootstrap pull request binding$`, symphonyShouldReuseExisting)
+	sc.Step(`^Heimdall polls Linear again$`, heimdallPollsLinear)
+	sc.Step(`^Heimdall should not create a duplicate workflow run$`, heimdallShouldNotCreateDuplicate)
+	sc.Step(`^Heimdall should reuse the existing proposal$`, heimdallShouldReuseExisting)
+	sc.Step(`^Heimdall should reuse the existing bootstrap pull request binding$`, heimdallShouldReuseExisting)
 	sc.Step(`^the issue enters active state$`, issueEntersActiveState)
 	sc.Step(`^the proposal branch should be named "([^"]*)"$`, proposalBranchShouldBeNamed)
 	sc.Step(`^the bootstrap branch should be named "([^"]*)"$`, proposalBranchShouldBeNamed)
 	sc.Step(`^the OpenSpec change should be named "([^"]*)"$`, openSpecChangeShouldBeNamed)
 	sc.Step(`^a Linear issue enters active state$`, linearIssueEntersActiveState)
-	sc.Step(`^Symphony generates the OpenSpec proposal$`, symphonyGeneratesProposal)
-	sc.Step(`^Symphony generates the activation bootstrap pull request$`, symphonyGeneratesBootstrapPullRequest)
-	sc.Step(`^Symphony should push the proposal branch$`, symphonyShouldPushBranch)
-	sc.Step(`^Symphony should push the bootstrap branch$`, symphonyShouldPushBranch)
-	sc.Step(`^Symphony should create a pull request to main$`, symphonyShouldCreatePR)
-	sc.Step(`^Symphony should create or reuse a bootstrap pull request to main$`, symphonyShouldCreatePR)
-	sc.Step(`^Symphony should create or reuse repository label "([^"]*)"$`, symphonyShouldCreateOrReuseRepositoryLabel)
-	sc.Step(`^Symphony should apply the monitor label "([^"]*)" to the bootstrap pull request$`, symphonyShouldApplyMonitorLabelToBootstrapPullRequest)
-	sc.Step(`^Symphony should comment with the change name and available commands$`, symphonyShouldCommentWithInfo)
-	sc.Step(`^Symphony should include the issue description in the bootstrap pull request body$`, symphonyShouldIncludeIssueDescriptionInPRBody)
+	sc.Step(`^Heimdall generates the OpenSpec proposal$`, heimdallGeneratesProposal)
+	sc.Step(`^Heimdall generates the activation bootstrap pull request$`, heimdallGeneratesBootstrapPullRequest)
+	sc.Step(`^Heimdall should push the proposal branch$`, heimdallShouldPushBranch)
+	sc.Step(`^Heimdall should push the bootstrap branch$`, heimdallShouldPushBranch)
+	sc.Step(`^Heimdall should create a pull request to main$`, heimdallShouldCreatePR)
+	sc.Step(`^Heimdall should create or reuse a bootstrap pull request to main$`, heimdallShouldCreatePR)
+	sc.Step(`^Heimdall should create or reuse repository label "([^"]*)"$`, heimdallShouldCreateOrReuseRepositoryLabel)
+	sc.Step(`^Heimdall should apply the monitor label "([^"]*)" to the bootstrap pull request$`, heimdallShouldApplyMonitorLabelToBootstrapPullRequest)
+	sc.Step(`^Heimdall should comment with the change name and available commands$`, heimdallShouldCommentWithInfo)
+	sc.Step(`^Heimdall should include the issue description in the bootstrap pull request body$`, heimdallShouldIncludeIssueDescriptionInPRBody)
 	sc.Step(`^the bootstrap execution produces no file changes$`, bootstrapExecutionProducesNoFileChanges)
-	sc.Step(`^Symphony should mark the workflow run as blocked$`, symphonyShouldMarkWorkflowBlocked)
-	sc.Step(`^Symphony should record the no-change reason$`, symphonyShouldRecordNoChangeReason)
-	sc.Step(`^Symphony should emit activation bootstrap logs with workflow step names$`, symphonyShouldEmitBootstrapLogs)
-	sc.Step(`^Symphony should not log installation tokens or raw bootstrap prompts$`, symphonyShouldRedactBootstrapLogs)
+	sc.Step(`^Heimdall should mark the workflow run as blocked$`, heimdallShouldMarkWorkflowBlocked)
+	sc.Step(`^Heimdall should record the no-change reason$`, heimdallShouldRecordNoChangeReason)
+	sc.Step(`^Heimdall should emit activation bootstrap logs with workflow step names$`, heimdallShouldEmitBootstrapLogs)
+	sc.Step(`^Heimdall should not log installation tokens or raw bootstrap prompts$`, heimdallShouldRedactBootstrapLogs)
 	sc.Step(`^the repository configures PR monitor label "([^"]*)"$`, repositoryConfiguresPRMonitorLabel)
 	sc.Step(`^the pull request carries monitor label "([^"]*)"$`, pullRequestCarriesMonitorLabel)
 
 	// Command handling steps
 	sc.Step(`^the user comments "([^"]*)"$`, userComments)
-	sc.Step(`^Symphony polls GitHub$`, symphonyPollsGitHub)
-	sc.Step(`^Symphony should discover the comment during polling$`, symphonyShouldDiscoverCommentDuringPolling)
-	sc.Step(`^Symphony should reply with the current proposal status$`, symphonyShouldReplyWithStatus)
-	sc.Step(`^Symphony should update the proposal artifacts$`, symphonyShouldUpdateArtifacts)
-	sc.Step(`^Symphony should commit the changes$`, symphonyShouldCommitChanges)
-	sc.Step(`^Symphony should push the updated branch$`, symphonyShouldPushUpdatedBranch)
+	sc.Step(`^Heimdall polls GitHub$`, heimdallPollsGitHub)
+	sc.Step(`^Heimdall should discover the comment during polling$`, heimdallShouldDiscoverCommentDuringPolling)
+	sc.Step(`^Heimdall should reply with the current proposal status$`, heimdallShouldReplyWithStatus)
+	sc.Step(`^Heimdall should update the proposal artifacts$`, heimdallShouldUpdateArtifacts)
+	sc.Step(`^Heimdall should commit the changes$`, heimdallShouldCommitChanges)
+	sc.Step(`^Heimdall should push the updated branch$`, heimdallShouldPushUpdatedBranch)
 	sc.Step(`^the repository allows agent "([^"]*)"$`, repositoryAllowsAgent)
-	sc.Step(`^Symphony should execute the apply workflow$`, symphonyShouldExecuteApply)
-	sc.Step(`^Symphony should commit implementation changes$`, symphonyShouldCommitImplementation)
-	sc.Step(`^Symphony should comment with the execution results$`, symphonyShouldCommentWithResults)
+	sc.Step(`^Heimdall should execute the apply workflow$`, heimdallShouldExecuteApply)
+	sc.Step(`^Heimdall should commit implementation changes$`, heimdallShouldCommitImplementation)
+	sc.Step(`^Heimdall should comment with the execution results$`, heimdallShouldCommentWithResults)
 	sc.Step(`^a user not in the allowed users list$`, userNotInAllowedList)
 	sc.Step(`^they comment "([^"]*)"$`, theyComment)
 	sc.Step(`^no workflow should be triggered$`, noWorkflowTriggered)
 	sc.Step(`^the repository does not allow agent "([^"]*)"$`, repositoryDoesNotAllowAgent)
-	sc.Step(`^Symphony should comment that the agent is not authorized$`, symphonyShouldCommentAgentNotAuthorized)
+	sc.Step(`^Heimdall should comment that the agent is not authorized$`, heimdallShouldCommentAgentNotAuthorized)
 	sc.Step(`^a command has already been processed$`, commandAlreadyProcessed)
 	sc.Step(`^the same comment is observed in another GitHub poll$`, sameCommentDeliveredAgain)
 	sc.Step(`^the duplicate should be detected$`, duplicateShouldBeDetected)
 	sc.Step(`^the command should not be executed again$`, commandNotExecutedAgain)
 	sc.Step(`^a command comment exists$`, commandCommentExists)
-	sc.Step(`^Symphony polls an edited version of the same comment$`, commentIsEdited)
+	sc.Step(`^Heimdall polls an edited version of the same comment$`, commentIsEdited)
 	sc.Step(`^the edit should not trigger a new command execution$`, editShouldNotTriggerExecution)
-	sc.Step(`^Symphony should ignore the pull request because it is missing monitor label$`, symphonyShouldIgnorePullRequestMissingMonitorLabel)
+	sc.Step(`^Heimdall should ignore the pull request because it is missing monitor label$`, heimdallShouldIgnorePullRequestMissingMonitorLabel)
 
 	// Security steps
-	sc.Step(`^a pull request not created by Symphony$`, nonSymphonyPRExists)
+	sc.Step(`^a pull request not created by Heimdall$`, nonHeimdallPRExists)
 	sc.Step(`^a user comments "([^"]*)"$`, userComments)
 	sc.Step(`^the command should be rejected$`, commandShouldBeRejected)
-	sc.Step(`^Symphony should record that the PR is not eligible$`, symphonyShouldRecordNotEligible)
-	sc.Step(`^Symphony runs without a public GitHub webhook endpoint$`, symphonyRunsWithoutPublicGitHubWebhookEndpoint)
+	sc.Step(`^Heimdall should record that the PR is not eligible$`, heimdallShouldRecordNotEligible)
+	sc.Step(`^Heimdall runs without a public GitHub webhook endpoint$`, heimdallRunsWithoutPublicGitHubWebhookEndpoint)
 	sc.Step(`^the command-intake path should not require a public webhook endpoint$`, commandIntakePathShouldNotRequirePublicWebhookEndpoint)
-	sc.Step(`^Symphony uses a GitHub App$`, symphonyUsesGitHubApp)
+	sc.Step(`^Heimdall uses a GitHub App$`, heimdallUsesGitHubApp)
 	sc.Step(`^installation tokens are minted$`, installationTokensMinted)
 	sc.Step(`^tokens should not appear in logs$`, tokensNotInLogs)
 	sc.Step(`^tokens should not be stored in SQLite$`, tokensNotInSQLite)
@@ -217,7 +217,7 @@ func getTC(ctx context.Context) *testContext {
 }
 
 // Background step implementations
-func symphonyIsConfigured(ctx context.Context) error {
+func heimdallIsConfigured(ctx context.Context) error {
 	tc := getTC(ctx)
 	tc.config = &config.Config{
 		Linear: config.LinearConfig{
@@ -238,7 +238,7 @@ func symphonyIsConfigured(ctx context.Context) error {
 				AllowedAgents:   []string{"gpt-5.4", "claude"},
 				LinearTeamKeys:  []string{"ENG"},
 				DefaultBranch:   "main",
-				BranchPrefix:    "symphony",
+				BranchPrefix:    "heimdall",
 			},
 		},
 	}
@@ -251,10 +251,10 @@ func executablesAreAvailable(ctx context.Context) error {
 	return nil
 }
 
-func symphonyManagedPRExists(ctx context.Context) error {
+func heimdallManagedPRExists(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.config == nil {
-		if err := symphonyIsConfigured(ctx); err != nil {
+		if err := heimdallIsConfigured(ctx); err != nil {
 			return err
 		}
 	}
@@ -265,7 +265,7 @@ func symphonyManagedPRExists(ctx context.Context) error {
 		Owner:           "test",
 		Name:            "repo",
 		DefaultBranch:   "main",
-		BranchPrefix:    "symphony",
+		BranchPrefix:    "heimdall",
 		LocalMirrorPath: tc.config.Repos[0].LocalMirrorPath,
 		IsActive:        true,
 	}
@@ -275,7 +275,7 @@ func symphonyManagedPRExists(ctx context.Context) error {
 
 	tc.repoBinding = &store.RepoBinding{
 		ID:            1,
-		BranchName:    "symphony/ENG-123-add-rate-limiting",
+		BranchName:    "heimdall/ENG-123-add-rate-limiting",
 		ChangeName:    "ENG-123-add-rate-limiting",
 		BindingStatus: "active",
 	}
@@ -285,7 +285,7 @@ func symphonyManagedPRExists(ctx context.Context) error {
 		Number:        42,
 		Title:         "[ENG-123] OpenSpec proposal for Add rate limiting",
 		Provider:      "github",
-		HeadBranch:    "symphony/ENG-123-add-rate-limiting",
+		HeadBranch:    "heimdall/ENG-123-add-rate-limiting",
 		BaseBranch:    "main",
 		State:         "open",
 		URL:           "https://github.com/test/repo/pull/42",
@@ -300,7 +300,7 @@ func symphonyManagedPRExists(ctx context.Context) error {
 func repositoryConfiguresPRMonitorLabel(ctx context.Context, label string) error {
 	tc := getTC(ctx)
 	if tc.config == nil {
-		if err := symphonyIsConfigured(ctx); err != nil {
+		if err := heimdallIsConfigured(ctx); err != nil {
 			return err
 		}
 	}
@@ -370,12 +370,12 @@ func issueIsMovedToState(ctx context.Context, state string) error {
 	return nil
 }
 
-func symphonyPollsLinear(ctx context.Context) error {
+func heimdallPollsLinear(ctx context.Context) error {
 	// Simulate polling - in real tests would trigger actual polling
 	return nil
 }
 
-func symphonyShouldDetectTransition(ctx context.Context) error {
+func heimdallShouldDetectTransition(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.workItem == nil || tc.workItem.LifecycleBucket != "active" {
 		return fmt.Errorf("expected work item to be in active state")
@@ -383,7 +383,7 @@ func symphonyShouldDetectTransition(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldCreateWorkflowRun(ctx context.Context) error {
+func heimdallShouldCreateWorkflowRun(ctx context.Context) error {
 	tc := getTC(ctx)
 	// Simulate workflow run creation
 	slug := workflow.SlugFromDescriptionOrTitle(tc.workItem.Description, tc.workItem.Title)
@@ -392,7 +392,7 @@ func symphonyShouldCreateWorkflowRun(ctx context.Context) error {
 		RunType:    "bootstrap_pull_request",
 		Status:     "queued",
 		ChangeName: workflow.GenerateChangeName(tc.workItem.WorkItemKey, slug),
-		BranchName: workflow.GenerateBranchName("symphony", tc.workItem.WorkItemKey, slug),
+		BranchName: workflow.GenerateBranchName("heimdall", tc.workItem.WorkItemKey, slug),
 	}
 	return nil
 }
@@ -416,7 +416,7 @@ func proposalBranchExists(ctx context.Context) error {
 	tc := getTC(ctx)
 	tc.repoBinding = &store.RepoBinding{
 		ID:            1,
-		BranchName:    "symphony/ENG-123-add-rate-limiting-for-api-requests",
+		BranchName:    "heimdall/ENG-123-add-rate-limiting-for-api-requests",
 		ChangeName:    "ENG-123-add-rate-limiting-for-api-requests",
 		BindingStatus: "active",
 	}
@@ -430,7 +430,7 @@ func proposalBranchExists(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldNotCreateDuplicate(ctx context.Context) error {
+func heimdallShouldNotCreateDuplicate(ctx context.Context) error {
 	tc := getTC(ctx)
 	// Verify no new workflow run was created
 	if tc.workflowRun != nil && tc.workflowRun.ID != 1 {
@@ -439,7 +439,7 @@ func symphonyShouldNotCreateDuplicate(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldReuseExisting(ctx context.Context) error {
+func heimdallShouldReuseExisting(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.repoBinding == nil {
 		return fmt.Errorf("expected existing binding to be reused")
@@ -459,7 +459,7 @@ func issueEntersActiveState(ctx context.Context) error {
 func proposalBranchShouldBeNamed(ctx context.Context, expectedName string) error {
 	tc := getTC(ctx)
 	slug := workflow.SlugFromDescriptionOrTitle(tc.workItem.Description, tc.workItem.Title)
-	actualName := workflow.GenerateBranchName("symphony", tc.workItem.WorkItemKey, slug)
+	actualName := workflow.GenerateBranchName("heimdall", tc.workItem.WorkItemKey, slug)
 	if actualName != expectedName {
 		return fmt.Errorf("expected branch name %q, got %q", expectedName, actualName)
 	}
@@ -480,22 +480,22 @@ func linearIssueEntersActiveState(ctx context.Context) error {
 	return linearIssueExistsWithDescription(ctx, "ENG-123", "Add rate limiting", "Add rate limiting for API requests")
 }
 
-func symphonyGeneratesProposal(ctx context.Context) error {
-	return symphonyShouldCreateWorkflowRun(ctx)
+func heimdallGeneratesProposal(ctx context.Context) error {
+	return heimdallShouldCreateWorkflowRun(ctx)
 }
 
-func symphonyGeneratesBootstrapPullRequest(ctx context.Context) error {
+func heimdallGeneratesBootstrapPullRequest(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.workItem == nil {
 		if err := linearIssueEntersActiveState(ctx); err != nil {
 			return err
 		}
 	}
-	if err := symphonyShouldCreateWorkflowRun(ctx); err != nil {
+	if err := heimdallShouldCreateWorkflowRun(ctx); err != nil {
 		return err
 	}
 
-	tc.bootstrapPrompt = "Create or update the file .symphony/bootstrap/ENG-123.md"
+	tc.bootstrapPrompt = "Create or update the file .heimdall/bootstrap/ENG-123.md"
 	tc.logOutput = strings.Join([]string{
 		"workflow_start",
 		"ensure_mirror",
@@ -514,7 +514,7 @@ func symphonyGeneratesBootstrapPullRequest(ctx context.Context) error {
 	slug := workflow.SlugFromDescriptionOrTitle(tc.workItem.Description, tc.workItem.Title)
 	tc.repoBinding = &store.RepoBinding{
 		ID:            1,
-		BranchName:    workflow.GenerateBranchName("symphony", tc.workItem.WorkItemKey, slug),
+		BranchName:    workflow.GenerateBranchName("heimdall", tc.workItem.WorkItemKey, slug),
 		ChangeName:    workflow.GenerateChangeName(tc.workItem.WorkItemKey, slug),
 		BindingStatus: "active",
 	}
@@ -542,7 +542,7 @@ func symphonyGeneratesBootstrapPullRequest(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldPushBranch(ctx context.Context) error {
+func heimdallShouldPushBranch(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.bootstrapNoChanges {
 		return fmt.Errorf("expected bootstrap push to be skipped after a no-change failure")
@@ -553,7 +553,7 @@ func symphonyShouldPushBranch(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldCreatePR(ctx context.Context) error {
+func heimdallShouldCreatePR(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.pr == nil {
 		return fmt.Errorf("expected bootstrap pull request to exist")
@@ -564,7 +564,7 @@ func symphonyShouldCreatePR(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldCreateOrReuseRepositoryLabel(ctx context.Context, label string) error {
+func heimdallShouldCreateOrReuseRepositoryLabel(ctx context.Context, label string) error {
 	tc := getTC(ctx)
 	if !containsString(tc.repositoryLabels, label) {
 		return fmt.Errorf("expected repository label %q, got %#v", label, tc.repositoryLabels)
@@ -572,7 +572,7 @@ func symphonyShouldCreateOrReuseRepositoryLabel(ctx context.Context, label strin
 	return nil
 }
 
-func symphonyShouldApplyMonitorLabelToBootstrapPullRequest(ctx context.Context, label string) error {
+func heimdallShouldApplyMonitorLabelToBootstrapPullRequest(ctx context.Context, label string) error {
 	tc := getTC(ctx)
 	if !containsString(tc.prLabels, label) {
 		return fmt.Errorf("expected bootstrap PR to carry label %q, got %#v", label, tc.prLabels)
@@ -580,12 +580,12 @@ func symphonyShouldApplyMonitorLabelToBootstrapPullRequest(ctx context.Context, 
 	return nil
 }
 
-func symphonyShouldCommentWithInfo(ctx context.Context) error {
+func heimdallShouldCommentWithInfo(ctx context.Context) error {
 	// Verify comment with change name and commands
 	return nil
 }
 
-func symphonyShouldIncludeIssueDescriptionInPRBody(ctx context.Context) error {
+func heimdallShouldIncludeIssueDescriptionInPRBody(ctx context.Context) error {
 	tc := getTC(ctx)
 	if !strings.Contains(tc.prBody, tc.workItem.Description) {
 		return fmt.Errorf("expected bootstrap PR body to include issue description")
@@ -598,7 +598,7 @@ func bootstrapExecutionProducesNoFileChanges(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldMarkWorkflowBlocked(ctx context.Context) error {
+func heimdallShouldMarkWorkflowBlocked(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.workflowRun == nil || tc.workflowRun.Status != "blocked" {
 		return fmt.Errorf("expected blocked workflow run, got %#v", tc.workflowRun)
@@ -606,7 +606,7 @@ func symphonyShouldMarkWorkflowBlocked(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldRecordNoChangeReason(ctx context.Context) error {
+func heimdallShouldRecordNoChangeReason(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.workflowRun == nil || tc.workflowRun.StatusReason != "bootstrap execution produced no file changes" {
 		return fmt.Errorf("expected no-change reason, got %#v", tc.workflowRun)
@@ -614,7 +614,7 @@ func symphonyShouldRecordNoChangeReason(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldEmitBootstrapLogs(ctx context.Context) error {
+func heimdallShouldEmitBootstrapLogs(ctx context.Context) error {
 	tc := getTC(ctx)
 	for _, step := range []string{"workflow_start", "ensure_mirror", "create_worktree", "run_bootstrap_prompt"} {
 		if !strings.Contains(tc.logOutput, step) {
@@ -624,7 +624,7 @@ func symphonyShouldEmitBootstrapLogs(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldRedactBootstrapLogs(ctx context.Context) error {
+func heimdallShouldRedactBootstrapLogs(ctx context.Context) error {
 	tc := getTC(ctx)
 	if strings.Contains(tc.logOutput, "installation-token") {
 		return fmt.Errorf("expected installation token to stay out of logs")
@@ -654,7 +654,7 @@ func theyComment(ctx context.Context, comment string) error {
 	return userComments(ctx, comment)
 }
 
-func symphonyPollsGitHub(ctx context.Context) error {
+func heimdallPollsGitHub(ctx context.Context) error {
 	tc := getTC(ctx)
 	tc.pollObserved = true
 	tc.isAuthorized = false
@@ -667,13 +667,13 @@ func symphonyPollsGitHub(ctx context.Context) error {
 		return nil
 	}
 	if tc.config == nil {
-		if err := symphonyIsConfigured(ctx); err != nil {
+		if err := heimdallIsConfigured(ctx); err != nil {
 			return err
 		}
 	}
 	if tc.repoBinding == nil || tc.pr == nil {
 		tc.isRejected = true
-		tc.rejectionReason = "PR is not Symphony-managed"
+		tc.rejectionReason = "PR is not Heimdall-managed"
 		return nil
 	}
 	if label := tc.config.Repos[0].PRMonitorLabel; label != "" && !containsString(tc.prLabels, label) {
@@ -694,7 +694,7 @@ func symphonyPollsGitHub(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldDiscoverCommentDuringPolling(ctx context.Context) error {
+func heimdallShouldDiscoverCommentDuringPolling(ctx context.Context) error {
 	tc := getTC(ctx)
 	if !tc.pollObserved {
 		return fmt.Errorf("expected GitHub polling to run")
@@ -705,7 +705,7 @@ func symphonyShouldDiscoverCommentDuringPolling(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldReplyWithStatus(ctx context.Context) error {
+func heimdallShouldReplyWithStatus(ctx context.Context) error {
 	tc := getTC(ctx)
 	if !tc.isAuthorized {
 		return fmt.Errorf("command was not authorized")
@@ -714,7 +714,7 @@ func symphonyShouldReplyWithStatus(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldUpdateArtifacts(ctx context.Context) error {
+func heimdallShouldUpdateArtifacts(ctx context.Context) error {
 	tc := getTC(ctx)
 	if !tc.isAuthorized {
 		return fmt.Errorf("command was not authorized")
@@ -722,11 +722,11 @@ func symphonyShouldUpdateArtifacts(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldCommitChanges(ctx context.Context) error {
+func heimdallShouldCommitChanges(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldPushUpdatedBranch(ctx context.Context) error {
+func heimdallShouldPushUpdatedBranch(ctx context.Context) error {
 	return nil
 }
 
@@ -739,7 +739,7 @@ func repositoryDoesNotAllowAgent(ctx context.Context, agent string) error {
 	tc := getTC(ctx)
 	// Ensure config is initialized
 	if tc.config == nil {
-		symphonyIsConfigured(ctx)
+		heimdallIsConfigured(ctx)
 	}
 	// Remove agent from allowed list
 	tc.config.Repos[0].AllowedAgents = []string{"gpt-5.4"}
@@ -748,7 +748,7 @@ func repositoryDoesNotAllowAgent(ctx context.Context, agent string) error {
 	return nil
 }
 
-func symphonyShouldExecuteApply(ctx context.Context) error {
+func heimdallShouldExecuteApply(ctx context.Context) error {
 	tc := getTC(ctx)
 	if !tc.isAuthorized {
 		return fmt.Errorf("apply command was not authorized")
@@ -756,11 +756,11 @@ func symphonyShouldExecuteApply(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldCommitImplementation(ctx context.Context) error {
+func heimdallShouldCommitImplementation(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldCommentWithResults(ctx context.Context) error {
+func heimdallShouldCommentWithResults(ctx context.Context) error {
 	return nil
 }
 
@@ -768,7 +768,7 @@ func userNotInAllowedList(ctx context.Context) error {
 	tc := getTC(ctx)
 	// Ensure config is initialized
 	if tc.config == nil {
-		symphonyIsConfigured(ctx)
+		heimdallIsConfigured(ctx)
 	}
 	tc.config.Repos[0].AllowedUsers = []string{"otheruser"}
 	return nil
@@ -782,7 +782,7 @@ func noWorkflowTriggered(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldCommentAgentNotAuthorized(ctx context.Context) error {
+func heimdallShouldCommentAgentNotAuthorized(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.isAuthorized {
 		return fmt.Errorf("expected agent to be rejected")
@@ -791,14 +791,14 @@ func symphonyShouldCommentAgentNotAuthorized(ctx context.Context) error {
 }
 
 func commandAlreadyProcessed(ctx context.Context) error {
-	if err := symphonyManagedPRExists(ctx); err != nil {
+	if err := heimdallManagedPRExists(ctx); err != nil {
 		return err
 	}
 	tc := getTC(ctx)
 	tc.pendingComment = "/opsx-apply --agent gpt-5.4"
 	tc.pendingCommentID = "comment-1"
 	tc.pendingActor = "testuser"
-	return symphonyPollsGitHub(ctx)
+	return heimdallPollsGitHub(ctx)
 }
 
 func sameCommentDeliveredAgain(ctx context.Context) error {
@@ -806,7 +806,7 @@ func sameCommentDeliveredAgain(ctx context.Context) error {
 	tc.pendingComment = "/opsx-apply --agent gpt-5.4"
 	tc.pendingCommentID = "comment-1"
 	tc.pendingActor = "testuser"
-	return symphonyPollsGitHub(ctx)
+	return heimdallPollsGitHub(ctx)
 }
 
 func duplicateShouldBeDetected(ctx context.Context) error {
@@ -831,10 +831,10 @@ func commandCommentExists(ctx context.Context) error {
 
 func commentIsEdited(ctx context.Context) error {
 	tc := getTC(ctx)
-	tc.pendingComment = "/symphony refine Updated after edit"
+	tc.pendingComment = "/heimdall refine Updated after edit"
 	tc.pendingCommentID = "comment-1"
 	tc.pendingActor = "testuser"
-	return symphonyPollsGitHub(ctx)
+	return heimdallPollsGitHub(ctx)
 }
 
 func editShouldNotTriggerExecution(ctx context.Context) error {
@@ -848,7 +848,7 @@ func editShouldNotTriggerExecution(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldIgnorePullRequestMissingMonitorLabel(ctx context.Context) error {
+func heimdallShouldIgnorePullRequestMissingMonitorLabel(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.workflowQueued {
 		return fmt.Errorf("expected unlabeled PR to be ignored without queueing work")
@@ -863,14 +863,14 @@ func symphonyShouldIgnorePullRequestMissingMonitorLabel(ctx context.Context) err
 }
 
 // Security step implementations
-func nonSymphonyPRExists(ctx context.Context) error {
+func nonHeimdallPRExists(ctx context.Context) error {
 	tc := getTC(ctx)
 	tc.pr = &store.PullRequest{
 		Number:   99,
 		Title:    "Regular PR",
 		Provider: "github",
 	}
-	tc.repoBinding = nil // Not a Symphony-managed PR
+	tc.repoBinding = nil // Not a Heimdall-managed PR
 	return nil
 }
 
@@ -882,7 +882,7 @@ func commandShouldBeRejected(ctx context.Context) error {
 	return nil
 }
 
-func symphonyShouldRecordNotEligible(ctx context.Context) error {
+func heimdallShouldRecordNotEligible(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.rejectionReason == "" {
 		return fmt.Errorf("expected a rejection reason for non-eligible PR")
@@ -899,7 +899,7 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-func symphonyRunsWithoutPublicGitHubWebhookEndpoint(ctx context.Context) error {
+func heimdallRunsWithoutPublicGitHubWebhookEndpoint(ctx context.Context) error {
 	tc := getTC(ctx)
 	tc.publicWebhook = false
 	return nil
@@ -916,7 +916,7 @@ func commandIntakePathShouldNotRequirePublicWebhookEndpoint(ctx context.Context)
 	return nil
 }
 
-func symphonyUsesGitHubApp(ctx context.Context) error {
+func heimdallUsesGitHubApp(ctx context.Context) error {
 	return nil
 }
 

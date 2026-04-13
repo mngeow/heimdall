@@ -9,22 +9,22 @@ import (
 	"os"
 	"time"
 
-	"github.com/mngeow/symphony/internal/board/linear"
-	"github.com/mngeow/symphony/internal/config"
-	internalexec "github.com/mngeow/symphony/internal/exec"
-	"github.com/mngeow/symphony/internal/repo"
-	"github.com/mngeow/symphony/internal/scm/github"
-	"github.com/mngeow/symphony/internal/slashcmd"
-	"github.com/mngeow/symphony/internal/store"
-	"github.com/mngeow/symphony/internal/validation"
-	"github.com/mngeow/symphony/internal/workflow"
+	"github.com/mngeow/heimdall/internal/board/linear"
+	"github.com/mngeow/heimdall/internal/config"
+	internalexec "github.com/mngeow/heimdall/internal/exec"
+	"github.com/mngeow/heimdall/internal/repo"
+	"github.com/mngeow/heimdall/internal/scm/github"
+	"github.com/mngeow/heimdall/internal/slashcmd"
+	"github.com/mngeow/heimdall/internal/store"
+	"github.com/mngeow/heimdall/internal/validation"
+	"github.com/mngeow/heimdall/internal/workflow"
 )
 
 type activationWorkflowExecutor interface {
 	Execute(context.Context, int64) error
 }
 
-// App represents the Symphony application
+// App represents the Heimdall application
 type App struct {
 	config         *config.Config
 	logger         *slog.Logger
@@ -39,7 +39,7 @@ type App struct {
 	ready          bool
 }
 
-// New creates a new Symphony application
+// New creates a new Heimdall application
 func New(ctx context.Context) (*App, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -94,7 +94,7 @@ func New(ctx context.Context) (*App, error) {
 func (a *App) Run(ctx context.Context) error {
 	defer a.store.Close()
 
-	a.logger.Info("starting Symphony", "version", "v0.1.0")
+	a.logger.Info("starting Heimdall", "version", "v0.1.0")
 
 	// Validate dependencies before marking ready
 	a.logger.Info("validating dependencies")
@@ -328,7 +328,7 @@ func syncConfiguredRepositories(ctx context.Context, runtimeStore *store.Store, 
 			repository.DefaultBranch = "main"
 		}
 		if repository.BranchPrefix == "" {
-			repository.BranchPrefix = "symphony"
+			repository.BranchPrefix = "heimdall"
 		}
 
 		if err := runtimeStore.SaveRepository(ctx, repository); err != nil {

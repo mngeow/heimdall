@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/mngeow/symphony/internal/app"
+	"github.com/mngeow/heimdall/internal/app"
 )
 
 func main() {

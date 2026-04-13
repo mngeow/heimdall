@@ -5,8 +5,8 @@
 
 ## 2. GitHub Polling Adapter
 
-- [x] 2.1 Extend `internal/scm/github` to mint installation-authenticated API clients that can list repo-scoped issue comments within a polling window and fetch current state for Symphony-managed pull requests.
-- [x] 2.2 Implement GitHub polling logic that filters repo activity down to Symphony-managed pull requests and converts eligible comments and pull request changes into runtime inputs for command handling and reconciliation.
+- [x] 2.1 Extend `internal/scm/github` to mint installation-authenticated API clients that can list repo-scoped issue comments within a polling window and fetch current state for Heimdall-managed pull requests.
+- [x] 2.2 Implement GitHub polling logic that filters repo activity down to Heimdall-managed pull requests and converts eligible comments and pull request changes into runtime inputs for command handling and reconciliation.
 
 ## 3. Durable State And Command Intake
 

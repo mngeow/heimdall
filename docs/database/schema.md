@@ -186,7 +186,7 @@ Stores the current polling position for each provider scope, such as a configure
 
 ### `repositories`
 
-Stores the repositories Symphony manages and the local bare-mirror paths it uses for worktree creation.
+Stores the repositories Heimdall manages and the local bare-mirror paths it uses for worktree creation.
 
 ### `work_items`
 
@@ -206,7 +206,7 @@ This is the record that ties together the work item, branch name, change name, a
 
 ### `pull_requests`
 
-Stores GitHub PR identity and state so Symphony can reconcile polled comment activity and PR lifecycle changes.
+Stores GitHub PR identity and state so Heimdall can reconcile polled comment activity and PR lifecycle changes.
 
 ### `command_requests`
 

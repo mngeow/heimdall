@@ -1,10 +1,10 @@
-# Symphony Durable Specs
+# Heimdall Durable Specs
 
 These OpenSpec capabilities are intentionally split into feature-facing behavior and service-facing behavior.
 
 ## Feature Specs
 
-- `feature-kanban-activation`: starting Symphony workflows from kanban state changes
+- `feature-kanban-activation`: starting Heimdall workflows from kanban state changes
 - `feature-openspec-proposal-pr`: generating OpenSpec changes, commits, and pull requests
 - `feature-pr-command-workflows`: refining specs and applying work from pull request comments
 

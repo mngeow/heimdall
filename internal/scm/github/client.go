@@ -15,7 +15,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	gh "github.com/google/go-github/v57/github"
-	"github.com/mngeow/symphony/internal/config"
+	"github.com/mngeow/heimdall/internal/config"
 )
 
 var defaultGitHubAPIBaseURL = mustParseURL("https://api.github.com/")

@@ -1,6 +1,6 @@
 ## Context
 
-Symphony currently treats GitHub pull request command intake as a webhook problem. The existing repo reflects that assumption in operator docs, durable specs, config fields, webhook-specific environment variables, and code paths such as `internal/httpserver/webhook.go`, `internal/scm/github/client.go`, and the related BDD steps.
+Heimdall currently treats GitHub pull request command intake as a webhook problem. The existing repo reflects that assumption in operator docs, durable specs, config fields, webhook-specific environment variables, and code paths such as `internal/httpserver/webhook.go`, `internal/scm/github/client.go`, and the related BDD steps.
 
 That conflicts with the desired v1 operating model for this change: one Linux host, no public GitHub webhook ingress, outbound-only API access, and the same operator-simplicity bias already used for Linear polling. The design therefore needs to replace inbound GitHub webhook handling with polling while preserving GitHub App auth, narrow command authorization, durable deduplication, and restart-safe reconciliation.
 
@@ -9,7 +9,7 @@ flowchart LR
     Timer["GitHub poll interval"] --> RepoScan["Repo-scoped poll"]
     RepoScan --> Comments["Repo issue comments\nwithin overlap window"]
     RepoScan --> PRs["Managed PR state reconcile"]
-    Comments --> Filter["Filter to Symphony-managed PRs"]
+    Comments --> Filter["Filter to Heimdall-managed PRs"]
     Filter --> Dedupe["Dedupe by comment identity"]
     Dedupe --> Auth["Authorize actor and parse command"]
     Auth --> Queue["Queue workflow run"]
@@ -22,7 +22,7 @@ flowchart LR
 - remove the standard v1 requirement for public GitHub webhook ingress
 - detect new pull request command comments and relevant pull request state changes through GitHub App polling
 - persist GitHub polling checkpoints and command dedupe state so polling remains safe across restarts and overlap windows
-- keep the command surface, authorization rules, and Symphony-managed-PR restriction unchanged
+- keep the command surface, authorization rules, and Heimdall-managed-PR restriction unchanged
 - keep the design inside the current single-binary, SQLite-backed runtime model
 
 **Non-Goals:**
@@ -35,12 +35,12 @@ flowchart LR
 
 ### Decision: Replace webhook intake with a GitHub polling lane
 
-Symphony will poll GitHub on a fixed interval using its GitHub App installation credentials instead of receiving inbound `issue_comment` and `pull_request` webhooks.
+Heimdall will poll GitHub on a fixed interval using its GitHub App installation credentials instead of receiving inbound `issue_comment` and `pull_request` webhooks.
 
 The poller should read:
 
 - newly created issue comments that fall inside a configured overlap window
-- relevant pull request state for Symphony-managed pull requests so lifecycle reconciliation still works
+- relevant pull request state for Heimdall-managed pull requests so lifecycle reconciliation still works
 
 Why:
 - it removes the public ingress requirement that the operator explicitly does not want
@@ -53,14 +53,14 @@ Alternatives considered:
 
 ### Decision: Use repo-scoped polling with managed-PR filtering
 
-The GitHub adapter should poll per managed repository, read repo-scoped issue comments within a `since` window, and then filter those comments down to Symphony-managed pull requests before command parsing.
+The GitHub adapter should poll per managed repository, read repo-scoped issue comments within a `since` window, and then filter those comments down to Heimdall-managed pull requests before command parsing.
 
-Pull request lifecycle reconciliation should use the repository's known Symphony pull request bindings and fetch current pull request state for that narrow set.
+Pull request lifecycle reconciliation should use the repository's known Heimdall pull request bindings and fetch current pull request state for that narrow set.
 
 Why:
 - repo-scoped issue comment polling avoids an N+1 per-pull-request comment crawl
-- filtering to Symphony-managed pull requests keeps API usage bounded and preserves the narrow mutation surface
-- existing repository bindings already give Symphony the stable identifiers needed to relate GitHub activity back to internal workflow state
+- filtering to Heimdall-managed pull requests keeps API usage bounded and preserves the narrow mutation surface
+- existing repository bindings already give Heimdall the stable identifiers needed to relate GitHub activity back to internal workflow state
 
 Alternatives considered:
 - polling each managed pull request separately for comments was rejected because the call count grows too quickly as active pull requests increase
@@ -68,7 +68,7 @@ Alternatives considered:
 
 ### Decision: Persist GitHub polling checkpoints separately from command dedupe keys
 
-Symphony should store both:
+Heimdall should store both:
 
 - a durable last-successful GitHub poll checkpoint per repository or equivalent scope
 - durable command-request identities keyed by comment ID or node ID
@@ -86,7 +86,7 @@ Alternatives considered:
 
 ### Decision: Remove webhook-specific operator requirements from the default deployment path
 
-The standard v1 configuration and setup path should remove GitHub webhook-specific requirements such as `webhook_path` and `SYMPHONY_GITHUB_WEBHOOK_SECRET`, replacing them with polling-oriented configuration such as a poll interval and overlap window.
+The standard v1 configuration and setup path should remove GitHub webhook-specific requirements such as `webhook_path` and `HEIMDALL_GITHUB_WEBHOOK_SECRET`, replacing them with polling-oriented configuration such as a poll interval and overlap window.
 
 If the process continues to expose HTTP endpoints, they should be treated as private health and readiness endpoints rather than public GitHub ingestion endpoints.
 
@@ -104,7 +104,7 @@ Alternatives considered:
 - [Polling increases command latency] -> Mitigation: default to a short interval such as `30s` and document the latency trade-off clearly.
 - [GitHub API rate limits become a runtime constraint] -> Mitigation: scope polling to managed repositories and managed pull requests, use overlap windows instead of oversized full scans, and back off on rate-limit responses.
 - [A bad cursor update could skip commands] -> Mitigation: advance only after successful poll cycles and dedupe by stable comment identity.
-- [Repo-wide comment polling may still surface unrelated comments] -> Mitigation: filter strictly to Symphony-managed pull requests before authorization or command parsing.
+- [Repo-wide comment polling may still surface unrelated comments] -> Mitigation: filter strictly to Heimdall-managed pull requests before authorization or command parsing.
 - [Migration touches multiple layers at once] -> Mitigation: change config, adapter logic, BDD scenarios, and docs together rather than leaving mixed webhook and polling semantics in the same release.
 
 ## Migration Plan
@@ -114,11 +114,11 @@ Alternatives considered:
 3. Add or update SQLite-backed state for GitHub polling checkpoints and reuse durable command-request dedupe keys.
 4. Update behavior tests so GitHub command intake is exercised through polling scenarios instead of webhook deliveries.
 5. Update docs and setup guides so operators disable GitHub App webhooks and configure polling instead.
-6. Deploy the new build without a public GitHub webhook endpoint and verify end-to-end command detection on a Symphony-managed pull request.
+6. Deploy the new build without a public GitHub webhook endpoint and verify end-to-end command detection on a Heimdall-managed pull request.
 
 Rollback is operational: restore the previous webhook-based build and config if needed, or pause GitHub command intake until a corrected polling build is deployed.
 
 ## Open Questions
 
-- Should the GitHub poller fetch repo-scoped issue comments from every managed repository on every cycle, or should it dynamically skip repositories with no active Symphony pull request bindings?
+- Should the GitHub poller fetch repo-scoped issue comments from every managed repository on every cycle, or should it dynamically skip repositories with no active Heimdall pull request bindings?
 - Should pull request lifecycle reconciliation run on the same interval as comment polling, or on a separate slower interval to reduce API volume?

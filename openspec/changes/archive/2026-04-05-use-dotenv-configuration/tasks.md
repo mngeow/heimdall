@@ -1,6 +1,6 @@
 ## 1. Library Research And Configuration Contract
 
-- [x] 1.1 Do internet research and select a Go library that can load environment variables from a dotenv file and process environment variables for Symphony.
+- [x] 1.1 Do internet research and select a Go library that can load environment variables from a dotenv file and process environment variables for Heimdall.
 - [x] 1.2 Define the canonical environment-variable key map for server, storage, polling, routing, authorization, and secret-related settings.
 - [x] 1.3 Update the design and setup docs to replace `config.yaml` with a project-root `.env` file and document the YAML-to-dotenv migration path.
 

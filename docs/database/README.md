@@ -1,6 +1,6 @@
 # Database Design
 
-This folder describes the SQLite database Symphony should use in v1.
+This folder describes the SQLite database Heimdall should use in v1.
 
 ## Goals
 

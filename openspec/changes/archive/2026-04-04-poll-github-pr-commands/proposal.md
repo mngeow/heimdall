@@ -1,16 +1,16 @@
 ## Why
 
-Symphony currently assumes a public GitHub webhook endpoint for pull request comment workflows. That makes the single-host deployment model harder to operate for users who do not want to expose public ingress, even though the rest of v1 already prefers polling and operator simplicity.
+Heimdall currently assumes a public GitHub webhook endpoint for pull request comment workflows. That makes the single-host deployment model harder to operate for users who do not want to expose public ingress, even though the rest of v1 already prefers polling and operator simplicity.
 
-This change is needed now to align GitHub command intake with that operator model: Symphony should poll GitHub for new pull request comments and pull request state changes instead of requiring inbound webhook delivery.
+This change is needed now to align GitHub command intake with that operator model: Heimdall should poll GitHub for new pull request comments and pull request state changes instead of requiring inbound webhook delivery.
 
 ## What Changes
 
 - Replace webhook-based GitHub pull request command intake with GitHub App polling against configured repositories.
-- Remove the v1 requirement for a public GitHub webhook URL and webhook secret when using the standard Symphony deployment path.
+- Remove the v1 requirement for a public GitHub webhook URL and webhook secret when using the standard Heimdall deployment path.
 - Add durable GitHub polling checkpoints, deduplication rules, and reconciliation behavior so restarts and overlapping poll windows do not re-run the same command.
 - Update operator-facing setup and configuration guidance to explain GitHub polling intervals, lookback windows, installation setup, and verification steps.
-- Preserve the narrow command surface and authorization rules: only supported commands on Symphony-managed pull requests from authorized actors may trigger mutation workflows.
+- Preserve the narrow command surface and authorization rules: only supported commands on Heimdall-managed pull requests from authorized actors may trigger mutation workflows.
 
 ## Capabilities
 

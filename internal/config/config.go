@@ -19,7 +19,7 @@ const (
 
 var repoIDPattern = regexp.MustCompile(`^[A-Z0-9_]+$`)
 
-// Config represents the Symphony configuration.
+// Config represents the Heimdall configuration.
 type Config struct {
 	Server  ServerConfig
 	Storage StorageConfig
@@ -37,7 +37,7 @@ type ServerConfig struct {
 // StorageConfig represents database configuration.
 type StorageConfig struct {
 	Driver string `env:"DRIVER" envDefault:"sqlite"`
-	DSN    string `env:"DSN" envDefault:"/var/lib/symphony/state/symphony.db"`
+	DSN    string `env:"DSN" envDefault:"/var/lib/heimdall/state/heimdall.db"`
 }
 
 // LinearConfig represents Linear integration configuration.
@@ -64,7 +64,7 @@ type RepoConfig struct {
 	Name            string   `env:"NAME,required,notEmpty"`
 	LocalMirrorPath string   `env:"LOCAL_MIRROR_PATH,required,notEmpty"`
 	DefaultBranch   string   `env:"DEFAULT_BRANCH" envDefault:"main"`
-	BranchPrefix    string   `env:"BRANCH_PREFIX" envDefault:"symphony"`
+	BranchPrefix    string   `env:"BRANCH_PREFIX" envDefault:"heimdall"`
 	PRMonitorLabel  string   `env:"PR_MONITOR_LABEL"`
 	LinearTeamKeys  []string `env:"LINEAR_TEAM_KEYS" envSeparator:","`
 	AllowedAgents   []string `env:"ALLOWED_AGENTS,required" envSeparator:","`
@@ -72,11 +72,11 @@ type RepoConfig struct {
 }
 
 type rootEnvConfig struct {
-	Server  ServerConfig    `envPrefix:"SYMPHONY_SERVER_"`
-	Storage StorageConfig   `envPrefix:"SYMPHONY_STORAGE_"`
-	Linear  LinearConfig    `envPrefix:"SYMPHONY_LINEAR_"`
-	GitHub  githubEnvConfig `envPrefix:"SYMPHONY_GITHUB_"`
-	RepoIDs []string        `env:"SYMPHONY_REPOS,required" envSeparator:","`
+	Server  ServerConfig    `envPrefix:"HEIMDALL_SERVER_"`
+	Storage StorageConfig   `envPrefix:"HEIMDALL_STORAGE_"`
+	Linear  LinearConfig    `envPrefix:"HEIMDALL_LINEAR_"`
+	GitHub  githubEnvConfig `envPrefix:"HEIMDALL_GITHUB_"`
+	RepoIDs []string        `env:"HEIMDALL_REPOS,required" envSeparator:","`
 }
 
 type githubEnvConfig struct {
@@ -99,7 +99,7 @@ func Load() (*Config, error) {
 	return LoadFromDir(projectRoot)
 }
 
-// LoadFromDir loads Symphony configuration for a specific project root.
+// LoadFromDir loads Heimdall configuration for a specific project root.
 func LoadFromDir(projectRoot string) (*Config, error) {
 	environment, err := loadEnvironment(projectRoot)
 	if err != nil {
@@ -149,51 +149,51 @@ func LoadFromDir(projectRoot string) (*Config, error) {
 // Validate ensures the loaded configuration is internally consistent.
 func (c *Config) Validate() error {
 	if len(c.Linear.ActiveStates) == 0 {
-		return fmt.Errorf("SYMPHONY_LINEAR_ACTIVE_STATES must include at least one state")
+		return fmt.Errorf("HEIMDALL_LINEAR_ACTIVE_STATES must include at least one state")
 	}
 	if c.Linear.ProjectName == "" {
-		return fmt.Errorf("SYMPHONY_LINEAR_PROJECT_NAME must not be empty")
+		return fmt.Errorf("HEIMDALL_LINEAR_PROJECT_NAME must not be empty")
 	}
 	if c.GitHub.PrivateKey == "" {
-		return fmt.Errorf("either SYMPHONY_GITHUB_PRIVATE_KEY or SYMPHONY_GITHUB_PRIVATE_KEY_FILE must be set")
+		return fmt.Errorf("either HEIMDALL_GITHUB_PRIVATE_KEY or HEIMDALL_GITHUB_PRIVATE_KEY_FILE must be set")
 	}
 	if c.GitHub.PollInterval <= 0 {
-		return fmt.Errorf("SYMPHONY_GITHUB_POLL_INTERVAL must be greater than zero")
+		return fmt.Errorf("HEIMDALL_GITHUB_POLL_INTERVAL must be greater than zero")
 	}
 	if c.GitHub.LookbackWindow <= 0 {
-		return fmt.Errorf("SYMPHONY_GITHUB_LOOKBACK_WINDOW must be greater than zero")
+		return fmt.Errorf("HEIMDALL_GITHUB_LOOKBACK_WINDOW must be greater than zero")
 	}
 	if len(c.Repos) == 0 {
-		return fmt.Errorf("SYMPHONY_REPOS must declare at least one repository")
+		return fmt.Errorf("HEIMDALL_REPOS must declare at least one repository")
 	}
 
 	repoRefs := make(map[string]string, len(c.Repos))
 	routedTeams := make(map[string]string)
 	for _, repo := range c.Repos {
 		if repo.Name == "" {
-			return fmt.Errorf("SYMPHONY_REPO_%s_NAME must not be empty", repo.ID)
+			return fmt.Errorf("HEIMDALL_REPO_%s_NAME must not be empty", repo.ID)
 		}
 		if repo.LocalMirrorPath == "" {
-			return fmt.Errorf("SYMPHONY_REPO_%s_LOCAL_MIRROR_PATH must not be empty", repo.ID)
+			return fmt.Errorf("HEIMDALL_REPO_%s_LOCAL_MIRROR_PATH must not be empty", repo.ID)
 		}
 		if len(repo.AllowedUsers) == 0 {
-			return fmt.Errorf("SYMPHONY_REPO_%s_ALLOWED_USERS must include at least one user", repo.ID)
+			return fmt.Errorf("HEIMDALL_REPO_%s_ALLOWED_USERS must include at least one user", repo.ID)
 		}
 		if len(repo.AllowedAgents) == 0 {
-			return fmt.Errorf("SYMPHONY_REPO_%s_ALLOWED_AGENTS must include at least one agent", repo.ID)
+			return fmt.Errorf("HEIMDALL_REPO_%s_ALLOWED_AGENTS must include at least one agent", repo.ID)
 		}
 		if existingRepoID, exists := repoRefs[repo.Name]; exists {
-			return fmt.Errorf("repository %q is defined more than once by SYMPHONY_REPO_%s_NAME and SYMPHONY_REPO_%s_NAME", repo.Name, existingRepoID, repo.ID)
+			return fmt.Errorf("repository %q is defined more than once by HEIMDALL_REPO_%s_NAME and HEIMDALL_REPO_%s_NAME", repo.Name, existingRepoID, repo.ID)
 		}
 		repoRefs[repo.Name] = repo.ID
 
 		if len(c.Repos) > 1 && len(repo.LinearTeamKeys) == 0 {
-			return fmt.Errorf("SYMPHONY_REPO_%s_LINEAR_TEAM_KEYS must include at least one team key when multiple repositories are configured", repo.ID)
+			return fmt.Errorf("HEIMDALL_REPO_%s_LINEAR_TEAM_KEYS must include at least one team key when multiple repositories are configured", repo.ID)
 		}
 
 		for _, teamKey := range repo.LinearTeamKeys {
 			if existingRepoID, exists := routedTeams[teamKey]; exists {
-				return fmt.Errorf("team key %q is configured for both SYMPHONY_REPO_%s_LINEAR_TEAM_KEYS and SYMPHONY_REPO_%s_LINEAR_TEAM_KEYS", teamKey, existingRepoID, repo.ID)
+				return fmt.Errorf("team key %q is configured for both HEIMDALL_REPO_%s_LINEAR_TEAM_KEYS and HEIMDALL_REPO_%s_LINEAR_TEAM_KEYS", teamKey, existingRepoID, repo.ID)
 			}
 			routedTeams[teamKey] = repo.ID
 		}
@@ -242,10 +242,10 @@ func loadEnvironment(projectRoot string) (map[string]string, error) {
 func loadRepoConfig(environment map[string]string, repoID string) (RepoConfig, error) {
 	repoID = strings.TrimSpace(repoID)
 	if repoID == "" {
-		return RepoConfig{}, fmt.Errorf("SYMPHONY_REPOS must not contain empty repository identifiers")
+		return RepoConfig{}, fmt.Errorf("HEIMDALL_REPOS must not contain empty repository identifiers")
 	}
 	if !repoIDPattern.MatchString(repoID) {
-		return RepoConfig{}, fmt.Errorf("SYMPHONY_REPOS entry %q must use only A-Z, 0-9, and _ characters", repoID)
+		return RepoConfig{}, fmt.Errorf("HEIMDALL_REPOS entry %q must use only A-Z, 0-9, and _ characters", repoID)
 	}
 
 	repoConfig, err := env.ParseAsWithOptions[RepoConfig](env.Options{
@@ -256,7 +256,7 @@ func loadRepoConfig(environment map[string]string, repoID string) (RepoConfig, e
 		return RepoConfig{}, fmt.Errorf("failed to parse repository %s configuration: %w", repoID, err)
 	}
 	if rawMonitorLabel, ok := environment[repoEnvPrefix(repoID)+"PR_MONITOR_LABEL"]; ok && strings.TrimSpace(rawMonitorLabel) == "" {
-		return RepoConfig{}, fmt.Errorf("SYMPHONY_REPO_%s_PR_MONITOR_LABEL must not be empty when set", repoID)
+		return RepoConfig{}, fmt.Errorf("HEIMDALL_REPO_%s_PR_MONITOR_LABEL must not be empty when set", repoID)
 	}
 
 	repoConfig.ID = repoID
@@ -324,7 +324,7 @@ func findLegacyYAMLFiles(projectRoot string) ([]string, error) {
 }
 
 func repoEnvPrefix(repoID string) string {
-	return "SYMPHONY_REPO_" + repoID + "_"
+	return "HEIMDALL_REPO_" + repoID + "_"
 }
 
 func trimNonEmpty(values []string) []string {

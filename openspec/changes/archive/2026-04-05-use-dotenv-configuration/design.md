@@ -1,6 +1,6 @@
 ## Context
 
-Symphony's current design assumes a YAML configuration file at `/etc/symphony/config.yaml` plus separate environment-backed secrets. This change replaces that split model with a single project-root `.env` configuration source while preserving the existing single-host, single-binary deployment model and the current routing, polling, and authorization semantics.
+Heimdall's current design assumes a YAML configuration file at `/etc/heimdall/config.yaml` plus separate environment-backed secrets. This change replaces that split model with a single project-root `.env` configuration source while preserving the existing single-host, single-binary deployment model and the current routing, polling, and authorization semantics.
 
 The main design challenge is expressing structured configuration such as repository lists, routing rules, allowlists, and durations in a flat dotenv format without making the operator experience ambiguous or brittle.
 
@@ -21,7 +21,7 @@ The main design challenge is expressing structured configuration such as reposit
 ## Decisions
 
 ### Decision: Use a single canonical project-root `.env` file
-Symphony will treat `.env` in the project root as the standard v1 configuration file.
+Heimdall will treat `.env` in the project root as the standard v1 configuration file.
 
 Rationale:
 - keeps a single operator-facing source of truth in a predictable repo-local location
@@ -32,16 +32,16 @@ Alternatives considered:
 - Keep YAML and add optional dotenv overrides. Rejected because dual-source precedence increases ambiguity and migration risk.
 - Read process environment only. Rejected because the change explicitly wants a file-backed configuration source that can be checked, validated, and backed up as one artifact.
 
-### Decision: Use stable `SYMPHONY_`-prefixed keys with named repo blocks
-Scalar settings will use stable `SYMPHONY_` keys. Repeated structures will use a top-level identifier list and named per-repo namespaces rather than nested YAML or positional indexes.
+### Decision: Use stable `HEIMDALL_`-prefixed keys with named repo blocks
+Scalar settings will use stable `HEIMDALL_` keys. Repeated structures will use a top-level identifier list and named per-repo namespaces rather than nested YAML or positional indexes.
 
 Representative shape:
-- `SYMPHONY_SERVER_LISTEN_ADDRESS`
-- `SYMPHONY_STORAGE_DSN`
-- `SYMPHONY_LINEAR_ACTIVE_STATES`
-- `SYMPHONY_REPOS=platform,docs`
-- `SYMPHONY_REPO_PLATFORM_REMOTE`
-- `SYMPHONY_REPO_PLATFORM_ALLOWED_USERS`
+- `HEIMDALL_SERVER_LISTEN_ADDRESS`
+- `HEIMDALL_STORAGE_DSN`
+- `HEIMDALL_LINEAR_ACTIVE_STATES`
+- `HEIMDALL_REPOS=platform,docs`
+- `HEIMDALL_REPO_PLATFORM_REMOTE`
+- `HEIMDALL_REPO_PLATFORM_ALLOWED_USERS`
 
 Rationale:
 - keeps the key set grepable and explicit
@@ -86,8 +86,8 @@ Alternatives considered:
 
 1. Document the canonical project-root `.env` path and key scheme in the relevant docs and setup guides.
 2. Define the YAML-to-dotenv field mapping, including repeated repo settings and routing rules.
-3. Update startup behavior so Symphony reads and validates dotenv configuration from the project root and does not silently fall back to YAML.
-4. Roll out by placing `.env` at the project root, restarting Symphony, and confirming readiness.
+3. Update startup behavior so Heimdall reads and validates dotenv configuration from the project root and does not silently fall back to YAML.
+4. Roll out by placing `.env` at the project root, restarting Heimdall, and confirming readiness.
 5. Roll back by restoring the prior release and its `config.yaml`-based configuration if needed.
 
 ## Open Questions

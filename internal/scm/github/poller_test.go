@@ -7,7 +7,7 @@ import (
 	"time"
 
 	gh "github.com/google/go-github/v57/github"
-	"github.com/mngeow/symphony/internal/store"
+	"github.com/mngeow/heimdall/internal/store"
 )
 
 func TestPollerFiltersManagedCommentsAndReconcilesPullRequests(t *testing.T) {
@@ -20,7 +20,7 @@ func TestPollerFiltersManagedCommentsAndReconcilesPullRequests(t *testing.T) {
 		Owner:           "acme",
 		Name:            "platform",
 		DefaultBranch:   "main",
-		BranchPrefix:    "symphony",
+		BranchPrefix:    "heimdall",
 		LocalMirrorPath: "/tmp/platform.git",
 		IsActive:        true,
 	}
@@ -36,7 +36,7 @@ func TestPollerFiltersManagedCommentsAndReconcilesPullRequests(t *testing.T) {
 		Number:        42,
 		Title:         "Old title",
 		BaseBranch:    "main",
-		HeadBranch:    "symphony/eng-123-add-rate-limiting",
+		HeadBranch:    "heimdall/eng-123-add-rate-limiting",
 		State:         "open",
 		URL:           "https://github.com/acme/platform/pull/42",
 	}
@@ -47,15 +47,15 @@ func TestPollerFiltersManagedCommentsAndReconcilesPullRequests(t *testing.T) {
 	now := time.Date(2026, 4, 4, 15, 0, 0, 0, time.UTC)
 	api := &fakePollAPI{
 		comments: []*gh.IssueComment{
-			newIssueComment(42, "IC_1", "/symphony status", "alice", now.Add(-30*time.Second)),
-			newIssueComment(99, "IC_2", "/symphony status", "bob", now.Add(-30*time.Second)),
+			newIssueComment(42, "IC_1", "/heimdall status", "alice", now.Add(-30*time.Second)),
+			newIssueComment(99, "IC_2", "/heimdall status", "bob", now.Add(-30*time.Second)),
 		},
 		pullRequests: map[int]*gh.PullRequest{
 			42: {
 				NodeID:  gh.String("PR_node_42"),
 				Title:   gh.String("Updated title"),
 				Base:    &gh.PullRequestBranch{Ref: gh.String("main")},
-				Head:    &gh.PullRequestBranch{Ref: gh.String("symphony/eng-123-add-rate-limiting")},
+				Head:    &gh.PullRequestBranch{Ref: gh.String("heimdall/eng-123-add-rate-limiting")},
 				State:   gh.String("closed"),
 				HTMLURL: gh.String("https://github.com/acme/platform/pull/42"),
 			},
@@ -107,7 +107,7 @@ func TestPollerUsesCheckpointOverlapWindow(t *testing.T) {
 		Owner:           "acme",
 		Name:            "platform",
 		DefaultBranch:   "main",
-		BranchPrefix:    "symphony",
+		BranchPrefix:    "heimdall",
 		LocalMirrorPath: "/tmp/platform.git",
 		IsActive:        true,
 	}
@@ -123,7 +123,7 @@ func TestPollerUsesCheckpointOverlapWindow(t *testing.T) {
 		Number:        42,
 		Title:         "Tracked PR",
 		BaseBranch:    "main",
-		HeadBranch:    "symphony/eng-123-add-rate-limiting",
+		HeadBranch:    "heimdall/eng-123-add-rate-limiting",
 		State:         "open",
 		URL:           "https://github.com/acme/platform/pull/42",
 	}); err != nil {
@@ -141,7 +141,7 @@ func TestPollerUsesCheckpointOverlapWindow(t *testing.T) {
 				NodeID:  gh.String("PR_node_42"),
 				Title:   gh.String("Tracked PR"),
 				Base:    &gh.PullRequestBranch{Ref: gh.String("main")},
-				Head:    &gh.PullRequestBranch{Ref: gh.String("symphony/eng-123-add-rate-limiting")},
+				Head:    &gh.PullRequestBranch{Ref: gh.String("heimdall/eng-123-add-rate-limiting")},
 				State:   gh.String("open"),
 				HTMLURL: gh.String("https://github.com/acme/platform/pull/42"),
 			},
@@ -171,8 +171,8 @@ func TestPollerIgnoresUnlabeledPullRequestsWhenMonitorLabelConfigured(t *testing
 		Owner:           "acme",
 		Name:            "platform",
 		DefaultBranch:   "main",
-		BranchPrefix:    "symphony",
-		PRMonitorLabel:  "symphony-monitored",
+		BranchPrefix:    "heimdall",
+		PRMonitorLabel:  "heimdall-monitored",
 		LocalMirrorPath: "/tmp/platform.git",
 		IsActive:        true,
 	}
@@ -188,7 +188,7 @@ func TestPollerIgnoresUnlabeledPullRequestsWhenMonitorLabelConfigured(t *testing
 		Number:        42,
 		Title:         "Tracked PR",
 		BaseBranch:    "main",
-		HeadBranch:    "symphony/eng-123-add-rate-limiting",
+		HeadBranch:    "heimdall/eng-123-add-rate-limiting",
 		State:         "open",
 		URL:           "https://github.com/acme/platform/pull/42",
 	}); err != nil {
@@ -198,14 +198,14 @@ func TestPollerIgnoresUnlabeledPullRequestsWhenMonitorLabelConfigured(t *testing
 	now := time.Date(2026, 4, 4, 15, 0, 0, 0, time.UTC)
 	api := &fakePollAPI{
 		comments: []*gh.IssueComment{
-			newIssueComment(42, "IC_1", "/symphony status", "alice", now.Add(-30*time.Second)),
+			newIssueComment(42, "IC_1", "/heimdall status", "alice", now.Add(-30*time.Second)),
 		},
 		pullRequests: map[int]*gh.PullRequest{
 			42: {
 				NodeID:  gh.String("PR_node_42"),
 				Title:   gh.String("Updated title"),
 				Base:    &gh.PullRequestBranch{Ref: gh.String("main")},
-				Head:    &gh.PullRequestBranch{Ref: gh.String("symphony/eng-123-add-rate-limiting")},
+				Head:    &gh.PullRequestBranch{Ref: gh.String("heimdall/eng-123-add-rate-limiting")},
 				State:   gh.String("open"),
 				HTMLURL: gh.String("https://github.com/acme/platform/pull/42"),
 			},

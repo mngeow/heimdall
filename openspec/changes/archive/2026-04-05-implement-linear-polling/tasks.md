@@ -7,7 +7,7 @@
 
 - [x] 2.1 Implement the Linear GraphQL client against `https://api.linear.app/graphql` with static API key authentication and structured handling for HTTP and GraphQL errors.
 - [x] 2.2 Implement project-scoped issue polling with `first` and `after` pagination, updated-time ordering or filtering, and only the GraphQL fields needed to build normalized work items.
-- [x] 2.3 Add dotenv configuration parsing and validation for the required `SYMPHONY_LINEAR_PROJECT_NAME` setting used by v1 polling.
+- [x] 2.3 Add dotenv configuration parsing and validation for the required `HEIMDALL_LINEAR_PROJECT_NAME` setting used by v1 polling.
 - [x] 2.4 Read and persist the Linear provider checkpoint in SQLite, including safe overlap semantics and no checkpoint advance on failed poll cycles.
 
 ## 3. Transition Detection And App Wiring

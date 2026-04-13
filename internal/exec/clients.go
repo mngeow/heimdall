@@ -184,10 +184,10 @@ func buildBootstrapPrompt(req BootstrapRequest) string {
 		description = "No issue description was provided."
 	}
 
-	return fmt.Sprintf(`You are creating Symphony's temporary activation bootstrap change.
+	return fmt.Sprintf(`You are creating Heimdall's temporary activation bootstrap change.
 
 Work only inside this repository.
-Create or update the file .symphony/bootstrap/%s.md.
+Create or update the file .heimdall/bootstrap/%s.md.
 Keep the change intentionally small and focused.
 Do not create an OpenSpec change.
 
@@ -204,5 +204,5 @@ Issue description:
 }
 
 func bootstrapSummary(req BootstrapRequest) string {
-	return fmt.Sprintf("Created or updated .symphony/bootstrap/%s.md from the activation seed.", req.IssueKey)
+	return fmt.Sprintf("Created or updated .heimdall/bootstrap/%s.md from the activation seed.", req.IssueKey)
 }

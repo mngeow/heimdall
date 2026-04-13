@@ -2,9 +2,9 @@
 
 ## Logging Goals
 
-Symphony should make it easy to answer four questions:
+Heimdall should make it easy to answer four questions:
 
-- did Symphony see the event or command?
+- did Heimdall see the event or command?
 - what workflow run was created?
 - what step failed or retried?
 - which commit, PR, issue, and agent were involved?
@@ -17,7 +17,7 @@ The Linux service manager should collect those logs, and in v1 the default colle
 
 This keeps the application simple:
 
-- Symphony does not need to manage its own log rotation
+- Heimdall does not need to manage its own log rotation
 - logs are easy to follow live with `journalctl`
 - future forwarding to a central log system can happen outside the app
 
@@ -25,12 +25,12 @@ This keeps the application simple:
 
 ```mermaid
 flowchart LR
-    Symphony["Symphony process"] --> Streams["stdout / stderr"]
+    Heimdall["Heimdall process"] --> Streams["stdout / stderr"]
     Streams --> Journald["journald"]
     Journald --> Journalctl["journalctl"]
     Journald --> Forwarder["optional log forwarder"]
-    Symphony --> SQLite["SQLite audit_events"]
-    Symphony --> PR["PR status comments"]
+    Heimdall --> SQLite["SQLite audit_events"]
+    Heimdall --> PR["PR status comments"]
 ```
 
 Operational logs, audit records, and PR comments serve different purposes:
@@ -67,7 +67,7 @@ Example:
 {
   "ts": "2026-04-04T12:30:55Z",
   "level": "info",
-  "service": "symphony",
+  "service": "heimdall",
   "workflow_id": "wf_018f",
   "run_type": "apply",
   "step": "push_branch",
@@ -91,7 +91,7 @@ V1 should default to `info`.
 
 ## Sensitive Data Rules
 
-Symphony logs must never contain:
+Heimdall logs must never contain:
 
 - GitHub App private keys
 - Linear API keys
@@ -103,30 +103,30 @@ If a failure must reference a secret-backed path, log the file path only, not th
 
 ## How To View Logs
 
-If Symphony runs under `systemd`, the main operator commands should be:
+If Heimdall runs under `systemd`, the main operator commands should be:
 
 Follow logs live:
 
 ```bash
-journalctl -u symphony -f
+journalctl -u heimdall -f
 ```
 
 Show recent logs:
 
 ```bash
-journalctl -u symphony --since "1 hour ago"
+journalctl -u heimdall --since "1 hour ago"
 ```
 
 Show logs for today:
 
 ```bash
-journalctl -u symphony --since today
+journalctl -u heimdall --since today
 ```
 
 Show JSON-formatted journal entries:
 
 ```bash
-journalctl -u symphony -o json-pretty
+journalctl -u heimdall -o json-pretty
 ```
 
 ## Finding A Specific Workflow
@@ -141,15 +141,15 @@ When troubleshooting a specific run, search by one of these fields:
 Examples:
 
 ```bash
-journalctl -u symphony --since today | rg '"workflow_id":"wf_018f"'
-journalctl -u symphony --since today | rg '"issue_key":"ENG-123"'
+journalctl -u heimdall --since today | rg '"workflow_id":"wf_018f"'
+journalctl -u heimdall --since today | rg '"issue_key":"ENG-123"'
 ```
 
 ## File Logs
 
 The preferred v1 model is journald-first logging.
 
-If your environment also forwards logs into `/var/log/symphony/`, treat those files as downstream copies managed by the host, not by Symphony itself.
+If your environment also forwards logs into `/var/log/heimdall/`, treat those files as downstream copies managed by the host, not by Heimdall itself.
 
 ## Recommended Retention Model
 
@@ -161,7 +161,7 @@ The application should not implement its own custom retention policy beyond stru
 
 ## What To Look At During An Incident
 
-1. `journalctl -u symphony -f` for current failures
+1. `journalctl -u heimdall -f` for current failures
 2. PR comments for the user-visible outcome
 3. SQLite `audit_events` and `workflow_runs` for durable history
-4. repo mirror and worktree state under `/var/lib/symphony/` if git operations failed
+4. repo mirror and worktree state under `/var/lib/heimdall/` if git operations failed

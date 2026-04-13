@@ -1,4 +1,4 @@
-module github.com/mngeow/symphony
+module github.com/mngeow/heimdall
 
 go 1.24.4
 

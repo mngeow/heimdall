@@ -3,7 +3,7 @@ package workflow
 import (
 	"testing"
 
-	"github.com/mngeow/symphony/internal/config"
+	"github.com/mngeow/heimdall/internal/config"
 )
 
 func TestSlugify(t *testing.T) {
@@ -30,8 +30,8 @@ func TestSlugify(t *testing.T) {
 }
 
 func TestGenerateBranchName(t *testing.T) {
-	result := GenerateBranchName("symphony", "ENG-123", "add-rate-limiting")
-	expected := "symphony/ENG-123-add-rate-limiting"
+	result := GenerateBranchName("heimdall", "ENG-123", "add-rate-limiting")
+	expected := "heimdall/ENG-123-add-rate-limiting"
 	if result != expected {
 		t.Errorf("GenerateBranchName() = %q, want %q", result, expected)
 	}
@@ -82,8 +82,8 @@ func TestGenerateChangeName(t *testing.T) {
 }
 
 func TestGenerateWorktreePath(t *testing.T) {
-	result := GenerateWorktreePath("/var/lib/symphony/repos/github.com/acme/platform.git", "symphony/ENG-123-add-rate-limiting")
-	expected := "/var/lib/symphony/repos/github.com/acme/platform-worktrees/symphony-ENG-123-add-rate-limiting"
+	result := GenerateWorktreePath("/var/lib/heimdall/repos/github.com/acme/platform.git", "heimdall/ENG-123-add-rate-limiting")
+	expected := "/var/lib/heimdall/repos/github.com/acme/platform-worktrees/heimdall-ENG-123-add-rate-limiting"
 	if result != expected {
 		t.Fatalf("GenerateWorktreePath() = %q, want %q", result, expected)
 	}
