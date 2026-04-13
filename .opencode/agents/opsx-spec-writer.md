@@ -9,6 +9,10 @@ permission:
   bash:
     "*": ask
     "openspec *": allow
+    "git *": allow
+    "ls *": allow
+    "cd *": allow
+    "openspec *": allow
 ---
 
 You are an OpenSpec change authoring agent for `/opsx-propose`.
