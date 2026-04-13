@@ -7,7 +7,7 @@
 *.dll
 *.so
 *.dylib
-/symphony
+/heimdall
 
 # Test binary, built with `go test -c`
 *.test

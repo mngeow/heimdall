@@ -2,7 +2,7 @@
 
 ## Runtime Overview
 
-Symphony should be a single Go binary with three long-running responsibilities:
+Heimdall should be a single Go binary with three long-running responsibilities:
 
 - a background poller that watches Linear for state transitions
 - a background poller that watches GitHub for new PR comments and relevant PR state changes
@@ -15,7 +15,7 @@ flowchart TB
     Linear["Linear<br/>GraphQL / API key"] -->|poll| Poller
     GitHub["GitHub<br/>App + APIs"] -->|poll| GitHubPoller
 
-    subgraph Symphony["Symphony"]
+    subgraph Heimdall["Heimdall"]
         Poller["Linear Poller"]
         GitHubPoller["GitHub Poller"]
         HTTPServer["HTTP Server<br/>health + readiness"]
@@ -76,7 +76,7 @@ Keeping these concerns separate makes testing easier and reduces the blast radiu
 
 ## Repo Manager
 
-Symphony needs a reliable local checkout strategy because OpenSpec and OpenCode run locally.
+Heimdall needs a reliable local checkout strategy because OpenSpec and OpenCode run locally.
 
 Recommended strategy:
 
@@ -88,7 +88,7 @@ Suggested layout:
 
 ```mermaid
 flowchart TB
-    Root["/var/lib/symphony"] --> Repos["repos/"]
+    Root["/var/lib/heimdall"] --> Repos["repos/"]
     Root --> Worktrees["worktrees/"]
     Repos --> Mirror["github.com/<owner>/<repo>.git"]
     Worktrees --> Provider["<provider>/"]
@@ -110,7 +110,7 @@ Two small adapters are enough:
 - `OpenSpecClient` for change creation, status inspection, instructions, and archive actions
 - `OpenCodeExecutor` for agent-driven refinement and apply operations
 
-Important rule: Symphony should trust CLI JSON output for workflow state instead of inferring artifact layout on its own.
+Important rule: Heimdall should trust CLI JSON output for workflow state instead of inferring artifact layout on its own.
 
 ## Persistence Model
 
@@ -126,7 +126,7 @@ The database should store at least:
 - comment command dedupe keys
 - audit trail records
 
-SQLite is enough for one service instance. If Symphony later becomes multi-node or multi-tenant, the storage layer can move to Postgres behind the same store interface.
+SQLite is enough for one service instance. If Heimdall later becomes multi-node or multi-tenant, the storage layer can move to Postgres behind the same store interface.
 
 ## Concurrency Model
 
@@ -147,7 +147,7 @@ The initial project structure should stay small and idiomatic:
 flowchart TB
     Root["repo root"] --> Cmd["cmd/"]
     Root --> Internal["internal/"]
-    Cmd --> Main["symphony/main.go"]
+    Cmd --> Main["heimdall/main.go"]
     Internal --> App["app/"]
     Internal --> Config["config/"]
     Internal --> Domain["domain/"]

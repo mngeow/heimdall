@@ -53,7 +53,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			owner TEXT NOT NULL,
 			name TEXT NOT NULL,
 			default_branch TEXT NOT NULL,
-			branch_prefix TEXT NOT NULL DEFAULT 'symphony',
+			branch_prefix TEXT NOT NULL DEFAULT 'heimdall',
 			pr_monitor_label TEXT NOT NULL DEFAULT '',
 			local_mirror_path TEXT NOT NULL,
 			is_active BOOLEAN NOT NULL DEFAULT 1

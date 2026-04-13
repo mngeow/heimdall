@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mngeow/symphony/internal/config"
-	"github.com/mngeow/symphony/internal/store"
+	"github.com/mngeow/heimdall/internal/config"
+	"github.com/mngeow/heimdall/internal/store"
 )
 
 // Router resolves the target repository for a work item
@@ -59,7 +59,7 @@ func (r *Router) Resolve(teamKey string) *RouteResult {
 func GenerateBranchName(branchPrefix, issueKey, slug string) string {
 	prefix := strings.Trim(strings.TrimSpace(branchPrefix), "/")
 	if prefix == "" {
-		prefix = "symphony"
+		prefix = "heimdall"
 	}
 	return fmt.Sprintf("%s/%s-%s", prefix, issueKey, slug)
 }

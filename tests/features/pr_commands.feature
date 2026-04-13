@@ -1,56 +1,56 @@
 Feature: Pull request command handling
   As an operator
-  I want to control Symphony workflows through PR comments
+  I want to control Heimdall workflows through PR comments
   So that I can refine specs and trigger implementation
 
   Background:
-    Given Symphony is configured with GitHub polling
-    Given a Symphony-managed pull request exists
+    Given Heimdall is configured with GitHub polling
+    Given a Heimdall-managed pull request exists
     And the PR author is in the allowed users list
 
   Rule: Authorized users can trigger commands discovered during polling
 
     Scenario: Status command
-      Given a Symphony-managed pull request exists
-      When the user comments "/symphony status"
-      And Symphony polls GitHub
-      Then Symphony should discover the comment during polling
-      And Symphony should reply with the current proposal status
+      Given a Heimdall-managed pull request exists
+      When the user comments "/heimdall status"
+      And Heimdall polls GitHub
+      Then Heimdall should discover the comment during polling
+      And Heimdall should reply with the current proposal status
 
     Scenario: Refine command
-      Given a Symphony-managed pull request exists
-      When the user comments "/symphony refine Add error handling section"
-      And Symphony polls GitHub
-      Then Symphony should discover the comment during polling
-      And Symphony should update the proposal artifacts
-      And Symphony should commit the changes
-      And Symphony should push the updated branch
+      Given a Heimdall-managed pull request exists
+      When the user comments "/heimdall refine Add error handling section"
+      And Heimdall polls GitHub
+      Then Heimdall should discover the comment during polling
+      And Heimdall should update the proposal artifacts
+      And Heimdall should commit the changes
+      And Heimdall should push the updated branch
 
     Scenario: Apply command with allowed agent
-      Given a Symphony-managed pull request exists
+      Given a Heimdall-managed pull request exists
       And the repository allows agent "gpt-5.4"
       When the user comments "/opsx-apply --agent gpt-5.4"
-      And Symphony polls GitHub
-      Then Symphony should discover the comment during polling
-      And Symphony should execute the apply workflow
-      And Symphony should commit implementation changes
-      And Symphony should comment with the execution results
+      And Heimdall polls GitHub
+      Then Heimdall should discover the comment during polling
+      And Heimdall should execute the apply workflow
+      And Heimdall should commit implementation changes
+      And Heimdall should comment with the execution results
 
   Rule: Unauthorized commands are rejected
 
     Scenario: User not in allowed list
       Given a user not in the allowed users list
-      When they comment "/symphony status"
-      And Symphony polls GitHub
+      When they comment "/heimdall status"
+      And Heimdall polls GitHub
       Then the command should be rejected
       And no workflow should be triggered
 
     Scenario: Agent not in allowed list
       Given the repository does not allow agent "unauthorized-agent"
       When the user comments "/opsx-apply --agent unauthorized-agent"
-      And Symphony polls GitHub
+      And Heimdall polls GitHub
       Then the command should be rejected
-      And Symphony should comment that the agent is not authorized
+      And Heimdall should comment that the agent is not authorized
 
   Rule: Duplicate commands are safe
 
@@ -62,14 +62,14 @@ Feature: Pull request command handling
 
     Scenario: Comment is edited after initial discovery
       Given a command comment exists
-      When Symphony polls an edited version of the same comment
+      When Heimdall polls an edited version of the same comment
       Then the edit should not trigger a new command execution
 
   Rule: Label-scoped polling ignores unlabeled pull requests
 
-    Scenario: Unlabeled Symphony pull request is ignored when monitor label is configured
-      Given a Symphony-managed pull request exists
-      And the repository configures PR monitor label "symphony-monitored"
-      When the user comments "/symphony status"
-      And Symphony polls GitHub
-      Then Symphony should ignore the pull request because it is missing monitor label
+    Scenario: Unlabeled Heimdall pull request is ignored when monitor label is configured
+      Given a Heimdall-managed pull request exists
+      And the repository configures PR monitor label "heimdall-monitored"
+      When the user comments "/heimdall status"
+      And Heimdall polls GitHub
+      Then Heimdall should ignore the pull request because it is missing monitor label

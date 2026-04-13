@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	gh "github.com/google/go-github/v57/github"
-	"github.com/mngeow/symphony/internal/exec"
-	"github.com/mngeow/symphony/internal/repo"
-	"github.com/mngeow/symphony/internal/store"
+	"github.com/mngeow/heimdall/internal/exec"
+	"github.com/mngeow/heimdall/internal/repo"
+	"github.com/mngeow/heimdall/internal/store"
 )
 
 type bootstrapRepoManager interface {
@@ -129,7 +129,7 @@ func (w *BootstrapWorkflow) Execute(ctx context.Context, runID int64) error {
 		return err
 	}
 
-	commitMessage := fmt.Sprintf("docs: bootstrap %s via symphony", strings.ToLower(workItem.WorkItemKey))
+	commitMessage := fmt.Sprintf("docs: bootstrap %s via heimdall", strings.ToLower(workItem.WorkItemKey))
 	commitSHA, err := w.commitStep(ctx, run.ID, run.WorktreePath, commitMessage, logger, nextStepOrder())
 	if err != nil {
 		return err

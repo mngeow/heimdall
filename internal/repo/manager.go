@@ -95,7 +95,7 @@ func (m *Manager) CommitAll(ctx context.Context, worktreePath, message string) (
 		return "", ErrNoChanges
 	}
 
-	cmd = exec.CommandContext(ctx, "git", "-C", worktreePath, "-c", "user.name=Symphony", "-c", "user.email=symphony@localhost", "commit", "-m", message)
+	cmd = exec.CommandContext(ctx, "git", "-C", worktreePath, "-c", "user.name=Heimdall", "-c", "user.email=heimdall@localhost", "commit", "-m", message)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("failed to commit: %w (output: %s)", err, string(output))
 	}

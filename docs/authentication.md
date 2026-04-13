@@ -9,25 +9,25 @@ Reasons:
 - short-lived installation tokens are safer than long-lived PATs
 - repo access can be granted per installation
 - permissions are easier to reason about and audit
-- installation-scoped API access fits Symphony's polling-based GitHub model
+- installation-scoped API access fits Heimdall's polling-based GitHub model
 
 ## Recommended GitHub App Permissions
 
-Start with the smallest practical set for Symphony's current PR-only flow:
+Start with the smallest practical set for Heimdall's current PR-only flow:
 
 - Metadata: read
 - Contents: read and write
 - Pull requests: read and write
 
-`Issues` is not required for Symphony's current v1 tasks. GitHub's GitHub App permissions matrix allows pull request creation, pull request comment polling and posting, repository-label creation, and PR label assignment under `Pull requests` for PR-backed flows. Add `Issues` only if Symphony later needs to act on standalone GitHub issues.
+`Issues` is not required for Heimdall's current v1 tasks. GitHub's GitHub App permissions matrix allows pull request creation, pull request comment polling and posting, repository-label creation, and PR label assignment under `Pull requests` for PR-backed flows. Add `Issues` only if Heimdall later needs to act on standalone GitHub issues.
 
 Possible later additions:
 
-- Checks: read and write, if Symphony starts publishing richer execution status
+- Checks: read and write, if Heimdall starts publishing richer execution status
 
 ## GitHub Poll Intake
 
-Symphony should poll for at least:
+Heimdall should poll for at least:
 
 - pull request comments through GitHub's issue-comment model for slash commands on pull requests
 - pull request state for reconciliation and future branch state handling
@@ -35,7 +35,7 @@ Symphony should poll for at least:
 The GitHub polling path must:
 
 - use GitHub App installation authentication for API reads
-- filter candidate comments down to Symphony-managed pull requests before mutation logic runs
+- filter candidate comments down to Heimdall-managed pull requests before mutation logic runs
 - dedupe by stable comment identity rather than timestamp alone
 - avoid logging full raw comment or API payload bodies that may contain sensitive content
 
@@ -46,7 +46,7 @@ GitHub App auth is needed in two places:
 - GitHub API calls for polling comments, inspecting PR state, creating PRs, posting comments, and inspecting repo state
 - local git push operations back to the branch
 
-For git push, Symphony should mint an installation token on demand and use HTTPS remotes such as:
+For git push, Heimdall should mint an installation token on demand and use HTTPS remotes such as:
 
 ```text
 https://x-access-token:<token>@github.com/<owner>/<repo>.git
@@ -76,14 +76,14 @@ GitHub comments are an input surface that can cause repo mutations, so comment a
 
 Recommended policy:
 
-- only accept commands on PRs opened by Symphony
+- only accept commands on PRs opened by Heimdall
 - only accept commands from repo collaborators with write or admin access
 - support an explicit per-repo allowlist in config
 - require the selected agent to be present in a per-repo allowlist
 
 Example policy:
 
-- `mngeow` may run `/symphony refine`
+- `mngeow` may run `/heimdall refine`
 - `mngeow` may run `/opsx-apply --agent gpt-5.4`
 - `random-external-user` may not trigger any mutation workflow
 
@@ -93,10 +93,10 @@ Secrets should be injected through environment variables or file paths outside g
 
 Recommended secret set:
 
-- `SYMPHONY_GITHUB_APP_ID`
-- `SYMPHONY_GITHUB_INSTALLATION_ID` if a single installation is used
-- `SYMPHONY_GITHUB_PRIVATE_KEY_FILE`
-- `SYMPHONY_LINEAR_API_TOKEN`
+- `HEIMDALL_GITHUB_APP_ID`
+- `HEIMDALL_GITHUB_INSTALLATION_ID` if a single installation is used
+- `HEIMDALL_GITHUB_PRIVATE_KEY_FILE`
+- `HEIMDALL_LINEAR_API_TOKEN`
 
 The service should never:
 

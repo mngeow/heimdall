@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	gh "github.com/google/go-github/v57/github"
-	"github.com/mngeow/symphony/internal/exec"
-	"github.com/mngeow/symphony/internal/store"
+	"github.com/mngeow/heimdall/internal/exec"
+	"github.com/mngeow/heimdall/internal/store"
 )
 
 type fakeBootstrapRepoManager struct {
@@ -103,7 +103,7 @@ func TestBootstrapWorkflowExecuteSuccessReusesExistingPullRequest(t *testing.T) 
 	ctx := context.Background()
 	runtimeStore := testWorkflowStore(t)
 	workItem, repository, run := seedBootstrapRun(t, ctx, runtimeStore)
-	repository.PRMonitorLabel = "symphony-monitored"
+	repository.PRMonitorLabel = "heimdall-monitored"
 	if err := runtimeStore.SaveRepository(ctx, repository); err != nil {
 		t.Fatalf("SaveRepository() error = %v", err)
 	}
@@ -114,7 +114,7 @@ func TestBootstrapWorkflowExecuteSuccessReusesExistingPullRequest(t *testing.T) 
 		existingPR:     &gh.PullRequest{Number: gh.Int(42), NodeID: gh.String("PR_node_42"), Title: gh.String("[ENG-123] Bootstrap PR for Add rate limiting"), State: gh.String("open"), HTMLURL: gh.String("https://example.test/pr/42")},
 		installationOK: true,
 	}
-	bootstrapRunner := &fakeBootstrapRunner{result: &exec.BootstrapResult{Summary: "Created or updated .symphony/bootstrap/ENG-123.md from the activation seed."}}
+	bootstrapRunner := &fakeBootstrapRunner{result: &exec.BootstrapResult{Summary: "Created or updated .heimdall/bootstrap/ENG-123.md from the activation seed."}}
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 
@@ -152,7 +152,7 @@ func TestBootstrapWorkflowExecuteSuccessReusesExistingPullRequest(t *testing.T) 
 	if githubClient.createCalls != 0 {
 		t.Fatalf("expected no PR create calls, got %d", githubClient.createCalls)
 	}
-	if len(githubClient.ensureLabel) != 1 || githubClient.ensureLabel[0] != "symphony-monitored" {
+	if len(githubClient.ensureLabel) != 1 || githubClient.ensureLabel[0] != "heimdall-monitored" {
 		t.Fatalf("expected PR monitor label reconciliation, got %#v", githubClient.ensureLabel)
 	}
 	if len(githubClient.addLabelCalls) != 1 || githubClient.addLabelCalls[0] != 42 {
@@ -229,8 +229,8 @@ func seedBootstrapRun(t *testing.T, ctx context.Context, runtimeStore *store.Sto
 		Owner:           "acme",
 		Name:            "platform",
 		DefaultBranch:   "main",
-		BranchPrefix:    "symphony",
-		LocalMirrorPath: "/var/lib/symphony/repos/github.com/acme/platform.git",
+		BranchPrefix:    "heimdall",
+		LocalMirrorPath: "/var/lib/heimdall/repos/github.com/acme/platform.git",
 		IsActive:        true,
 	}
 	if err := runtimeStore.SaveRepository(ctx, repository); err != nil {

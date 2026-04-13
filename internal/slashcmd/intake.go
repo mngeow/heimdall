@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/mngeow/symphony/internal/config"
-	"github.com/mngeow/symphony/internal/store"
+	"github.com/mngeow/heimdall/internal/config"
+	"github.com/mngeow/heimdall/internal/store"
 )
 
 // Intake persists and deduplicates command observations from GitHub polling.

@@ -1,6 +1,6 @@
 ## Context
 
-Symphony's current product and durable specs assume that a Linear activation event starts an OpenSpec proposal workflow: create a deterministic branch, scaffold an OpenSpec change, generate proposal artifacts, commit them, and open a pull request. The next implementation step is intentionally narrower. After an issue is observed in an active state, Symphony should extract the issue title and description, create a worktree from the configured local bare mirror, invoke the local `opencode` CLI with the general agent and model `gpt-5.4`, let that execution make a simple non-empty repository file change, commit and push the resulting branch, and open a pull request.
+Heimdall's current product and durable specs assume that a Linear activation event starts an OpenSpec proposal workflow: create a deterministic branch, scaffold an OpenSpec change, generate proposal artifacts, commit them, and open a pull request. The next implementation step is intentionally narrower. After an issue is observed in an active state, Heimdall should extract the issue title and description, create a worktree from the configured local bare mirror, invoke the local `opencode` CLI with the general agent and model `gpt-5.4`, let that execution make a simple non-empty repository file change, commit and push the resulting branch, and open a pull request.
 
 This is still a cross-cutting workflow change. It affects Linear activation handling, repo worktree management, execution-runtime behavior, git mutation steps, GitHub branch push and PR creation, and the workflow semantics documented in the existing specs. It is not meant to replace the longer-term OpenSpec proposal direction; it is meant to prove the end-to-end activation-to-PR plumbing first, then later swap the simple file change for real OpenSpec proposal generation.
 
@@ -17,7 +17,7 @@ Because this workflow crosses several system boundaries, operators also need muc
 - Keep the bootstrap execution step easy to replace with later OpenSpec proposal generation.
 
 **Non-Goals:**
-- Replacing or removing Symphony's longer-term OpenSpec proposal workflow direction.
+- Replacing or removing Heimdall's longer-term OpenSpec proposal workflow direction.
 - Generating or maintaining an OpenSpec change as part of this initial activation bootstrap change.
 - Letting the user choose the activation bootstrap agent or model in v1.
 - Building a general-purpose code-generation orchestration system beyond this single bootstrap path.
@@ -38,10 +38,10 @@ Alternatives considered:
 - Attempt full OpenSpec artifact generation immediately. Rejected because this change is intentionally validating the simpler activation-to-PR path first.
 
 ### Decision: Create the worktree from the configured bare mirror path
-Symphony will ensure the bare mirror exists at the resolved repository's configured local mirror path and create the activation worktree from that mirror before invoking OpenCode.
+Heimdall will ensure the bare mirror exists at the resolved repository's configured local mirror path and create the activation worktree from that mirror before invoking OpenCode.
 
 Rationale:
-- aligns with the repo-manager architecture already documented for Symphony
+- aligns with the repo-manager architecture already documented for Heimdall
 - avoids full clone cost on every activation
 - keeps the git mutation path deterministic and recoverable
 
@@ -53,7 +53,7 @@ Alternatives considered:
 The activation workflow will use a deterministic branch name that includes the issue key and a slug derived from the issue description, falling back to the title when the description does not yield a usable slug.
 
 Representative shape:
-- `symphony/<issue-key>-<description-slug>`
+- `heimdall/<issue-key>-<description-slug>`
 
 Rationale:
 - matches the request to base the branch on the ticket description
@@ -65,7 +65,7 @@ Alternatives considered:
 - Use a random branch name. Rejected because it would break reconcile-before-create behavior.
 
 ### Decision: Treat the bootstrap change as successful only when the agent produces real repository mutations
-If the OpenCode bootstrap run completes without leaving any file changes to commit, Symphony will treat the workflow as failed or blocked rather than creating an empty branch or PR.
+If the OpenCode bootstrap run completes without leaving any file changes to commit, Heimdall will treat the workflow as failed or blocked rather than creating an empty branch or PR.
 
 Rationale:
 - avoids misleading automation PRs with no meaningful content
@@ -92,7 +92,7 @@ The PR title will be derived from the issue title, while the PR body will includ
 
 Rationale:
 - satisfies the requirement for an appropriate title and description
-- keeps the PR understandable without requiring a separate Symphony UI
+- keeps the PR understandable without requiring a separate Heimdall UI
 - preserves a clear audit trail from Linear issue to GitHub pull request
 
 Alternatives considered:
@@ -100,7 +100,7 @@ Alternatives considered:
 - Use only an agent-generated PR body. Rejected because the source issue context should remain explicit.
 
 ### Decision: Emit step-level structured logs for activation bootstrap runs
-Symphony will emit detailed structured logs for the activation-triggered bootstrap workflow, including workflow creation, repository resolution, worktree creation, OpenCode invocation and completion, change detection, branch reconciliation, commit and push attempts, pull request creation or reuse, and terminal workflow outcomes.
+Heimdall will emit detailed structured logs for the activation-triggered bootstrap workflow, including workflow creation, repository resolution, worktree creation, OpenCode invocation and completion, change detection, branch reconciliation, commit and push attempts, pull request creation or reuse, and terminal workflow outcomes.
 
 Expected log context includes:
 - workflow run identifier
@@ -114,7 +114,7 @@ Expected log context includes:
 The logging boundary will still exclude secrets, installation tokens, and raw prompt bodies.
 
 Rationale:
-- gives operators enough detail to understand what Symphony is doing during long-running activation flows
+- gives operators enough detail to understand what Heimdall is doing during long-running activation flows
 - makes failures diagnosable without attaching a debugger or reading the database directly
 - keeps the future OpenSpec proposal generation swap easier because the same workflow-level logging can stay in place
 

@@ -120,7 +120,7 @@ This keeps the workflow engine stable while adapters own provider semantics.
 
 ## Suggested Expansion Order
 
-If Symphony grows beyond the first release, the safest order is:
+If Heimdall grows beyond the first release, the safest order is:
 
 1. multiple repositories with richer routing rules
 2. remote execution abstraction for OpenCode operations

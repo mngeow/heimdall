@@ -1,4 +1,4 @@
-# Project: Symphony
+# Project: Heimdall
 A Linux-hosted Go service that turns kanban movement into OpenSpec-driven engineering work by converting board activity into branches, specs, PRs, and agent-driven implementation flows.
 
 Built with: Go application code (planned), OpenSpec `spec-driven` workflow, local OpenCode/OpenSpec CLI execution, Markdown docs in `/docs/`, SQLite for v1, GitHub App auth, Linear polling.
@@ -36,7 +36,7 @@ Built with: Go application code (planned), OpenSpec `spec-driven` workflow, loca
 
 ## Git Workflow
 - Use focused branches. For manual work, prefer prefixes like `feat/`, `fix/`, or `docs/`.
-- Symphony's automated branch naming is documented in `docs/product.md`; keep automation naming deterministic.
+- Heimdall's automated branch naming is documented in `docs/product.md`; keep automation naming deterministic.
 - Use conventional commit prefixes where practical.
 - Never push directly to `main` unless the user explicitly asks for it.
 - Keep commits scoped to one concern so generated specs, workflow logic, and unrelated edits do not get mixed together.

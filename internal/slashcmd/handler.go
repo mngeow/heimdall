@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/mngeow/symphony/internal/config"
-	"github.com/mngeow/symphony/internal/store"
+	"github.com/mngeow/heimdall/internal/config"
+	"github.com/mngeow/heimdall/internal/store"
 )
 
 // Parser handles parsing of PR comment commands
@@ -37,9 +37,9 @@ func (p *Parser) Parse(comment string) *Command {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 
-		// Check for /symphony commands
-		if strings.HasPrefix(line, "/symphony ") {
-			return p.parseSymphonyCommand(line)
+		// Check for /heimdall commands
+		if strings.HasPrefix(line, "/heimdall ") {
+			return p.parseHeimdallCommand(line)
 		}
 
 		// Check for /opsx-apply
@@ -56,7 +56,7 @@ func (p *Parser) Parse(comment string) *Command {
 	return nil
 }
 
-func (p *Parser) parseSymphonyCommand(line string) *Command {
+func (p *Parser) parseHeimdallCommand(line string) *Command {
 	parts := strings.Fields(line)
 	if len(parts) < 2 {
 		return &Command{IsValid: false, Error: "missing subcommand"}
@@ -72,7 +72,7 @@ func (p *Parser) parseSymphonyCommand(line string) *Command {
 			IsValid: true,
 		}
 	case "refine":
-		instruction := strings.TrimSpace(strings.TrimPrefix(line, "/symphony refine"))
+		instruction := strings.TrimSpace(strings.TrimPrefix(line, "/heimdall refine"))
 		return &Command{
 			Name:    "refine",
 			Args:    []string{instruction},

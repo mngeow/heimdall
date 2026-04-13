@@ -1,8 +1,8 @@
 ## Context
 
-Symphony's product flow starts when a Linear issue enters an active state, but the current provider implementation is still a stub and the durable specs do not yet pin the runtime contract to Linear's actual GraphQL API behavior. Linear's developer documentation describes a single GraphQL endpoint at `https://api.linear.app/graphql`, support for personal or static API keys via the `Authorization: <API_KEY>` header, Relay-style cursor pagination with `first` and `after`, filtering on paginated queries, and API request or complexity rate limits exposed through response headers.
+Heimdall's product flow starts when a Linear issue enters an active state, but the current provider implementation is still a stub and the durable specs do not yet pin the runtime contract to Linear's actual GraphQL API behavior. Linear's developer documentation describes a single GraphQL endpoint at `https://api.linear.app/graphql`, support for personal or static API keys via the `Authorization: <API_KEY>` header, Relay-style cursor pagination with `first` and `after`, filtering on paginated queries, and API request or complexity rate limits exposed through response headers.
 
-The implementation needs to stay inside Symphony's current v1 constraints: one Linux-hosted binary, SQLite-backed checkpoints and snapshots, explicit provider adapters, and no reliance on inbound Linear webhooks. It also needs to be careful not to turn a single polling loop into an API-heavy crawler, because Linear explicitly recommends filtering and ordering by recently updated data when polling is unavoidable. For v1, the polling scope is intentionally narrow: Symphony will only poll issues in one configured Linear project, and that project name must come from the `SYMPHONY_LINEAR_PROJECT_NAME` setting in the application's `.env` configuration.
+The implementation needs to stay inside Heimdall's current v1 constraints: one Linux-hosted binary, SQLite-backed checkpoints and snapshots, explicit provider adapters, and no reliance on inbound Linear webhooks. It also needs to be careful not to turn a single polling loop into an API-heavy crawler, because Linear explicitly recommends filtering and ordering by recently updated data when polling is unavoidable. For v1, the polling scope is intentionally narrow: Heimdall will only poll issues in one configured Linear project, and that project name must come from the `HEIMDALL_LINEAR_PROJECT_NAME` setting in the application's `.env` configuration.
 
 ## Goals / Non-Goals
 
@@ -23,12 +23,12 @@ The implementation needs to stay inside Symphony's current v1 constraints: one L
 ## Decisions
 
 ### Decision: Use Linear's static API key model for v1 poll authentication
-Symphony will authenticate Linear poll requests with a secret-backed static API key using Linear's documented `Authorization: <API_KEY>` header form.
+Heimdall will authenticate Linear poll requests with a secret-backed static API key using Linear's documented `Authorization: <API_KEY>` header form.
 
 Rationale:
 - matches the user's requested operating model
 - aligns with Linear's documented simplest auth path for personal or service-style scripts
-- avoids OAuth complexity for Symphony's single-operator v1 deployment
+- avoids OAuth complexity for Heimdall's single-operator v1 deployment
 
 Alternatives considered:
 - OAuth 2.0. Rejected because it adds token lifecycle and app registration complexity without solving a current v1 problem.
@@ -87,7 +87,7 @@ query PollIssues($first: Int!, $after: String, $updatedSince: DateTime, $project
 
 Rationale:
 - matches Linear's documented GraphQL pagination model
-- keeps the query minimal and targeted to the fields Symphony actually normalizes
+- keeps the query minimal and targeted to the fields Heimdall actually normalizes
 - supports safe workspace polling without per-issue reads
 - matches the requested v1 operating model of project-level polling only
 
@@ -97,7 +97,7 @@ Alternatives considered:
 - Filter by team key in v1. Rejected because the requested v1 scope is project-level polling only.
 
 ### Decision: Persist a successful poll timestamp checkpoint, and use page cursors only within a single poll cycle
-Symphony will store the last successful Linear poll timestamp as its durable provider cursor. Within a single poll cycle, it will use the GraphQL page cursor only to drain additional pages. The next cycle will query by updated-time filter from a safe overlapping checkpoint window rather than trying to resume a stale GraphQL page cursor across restarts.
+Heimdall will store the last successful Linear poll timestamp as its durable provider cursor. Within a single poll cycle, it will use the GraphQL page cursor only to drain additional pages. The next cycle will query by updated-time filter from a safe overlapping checkpoint window rather than trying to resume a stale GraphQL page cursor across restarts.
 
 Rationale:
 - fits the existing SQLite provider-cursor model
@@ -108,8 +108,8 @@ Alternatives considered:
 - Persist the GraphQL `endCursor` across poll cycles. Rejected because page cursors are tied to one query sequence and are more brittle across restarts or filter changes.
 - Persist only the last seen issue identifier. Rejected because update-time filtering is a better match for recently changed issue polling.
 
-### Decision: Require `SYMPHONY_LINEAR_PROJECT_NAME` in dotenv configuration
-Symphony will require `SYMPHONY_LINEAR_PROJECT_NAME` in dotenv configuration, and the provider will refuse to start polling when that value is missing.
+### Decision: Require `HEIMDALL_LINEAR_PROJECT_NAME` in dotenv configuration
+Heimdall will require `HEIMDALL_LINEAR_PROJECT_NAME` in dotenv configuration, and the provider will refuse to start polling when that value is missing.
 
 Rationale:
 - keeps the project-scoping contract explicit and operator-visible
@@ -121,7 +121,7 @@ Alternatives considered:
 - Poll all projects visible to the API key. Rejected because it would broaden scope and increase accidental activations.
 
 ### Decision: Keep active-state mapping inside the adapter, driven by configured state names
-The Linear adapter will continue mapping provider-specific state names into Symphony's normalized `active` lifecycle bucket by using configured active state names, while still reading GraphQL `state.type` and `state.name` as part of the normalized payload.
+The Linear adapter will continue mapping provider-specific state names into Heimdall's normalized `active` lifecycle bucket by using configured active state names, while still reading GraphQL `state.type` and `state.name` as part of the normalized payload.
 
 Rationale:
 - preserves the existing explicit operator configuration model
@@ -132,7 +132,7 @@ Alternatives considered:
 - Treat Linear `state.type` as the only activation source. Rejected because operator-configured active-state names are already part of the product and setup model.
 
 ### Decision: Treat GraphQL errors, auth failures, and rate limits as failed poll cycles that do not advance checkpoints
-If a Linear poll cycle receives an auth failure, an HTTP failure, a GraphQL response containing an `errors` array, or a rate-limit response, Symphony will treat the cycle as unsuccessful and leave the durable checkpoint unchanged.
+If a Linear poll cycle receives an auth failure, an HTTP failure, a GraphQL response containing an `errors` array, or a rate-limit response, Heimdall will treat the cycle as unsuccessful and leave the durable checkpoint unchanged.
 
 Rationale:
 - avoids data loss from advancing the checkpoint after a partial or failed read

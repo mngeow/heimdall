@@ -1,6 +1,6 @@
 ## Context
 
-Symphony now has durable product and service specifications, but the repository still lacks a runnable Go application. This bootstrap change creates the first executable service slice that can exercise the documented Linux-hosted workflow: poll Linear, reconcile repository state, create an OpenSpec proposal branch and pull request, accept PR command requests, and persist enough state and observability data to operate the service safely.
+Heimdall now has durable product and service specifications, but the repository still lacks a runnable Go application. This bootstrap change creates the first executable service slice that can exercise the documented Linux-hosted workflow: poll Linear, reconcile repository state, create an OpenSpec proposal branch and pull request, accept PR command requests, and persist enough state and observability data to operate the service safely.
 
 The main constraints are already fixed by the docs and specs:
 
@@ -44,7 +44,7 @@ flowchart LR
 
 ### Decision: Build a single binary with three runtime lanes
 
-Symphony will run one process containing:
+Heimdall will run one process containing:
 
 - a Linear polling lane
 - an HTTP lane for GitHub webhooks and health endpoints
@@ -84,7 +84,7 @@ The bootstrap service will keep these boundaries explicit:
 - `workflow` for provider-neutral orchestration
 
 Why:
-- it matches the durable service specs already written for Symphony
+- it matches the durable service specs already written for Heimdall
 - it limits provider leakage into the core workflow engine
 - it keeps the future Jira and remote-execution path open without overengineering the first implementation
 

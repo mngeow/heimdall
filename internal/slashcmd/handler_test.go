@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mngeow/symphony/internal/config"
-	"github.com/mngeow/symphony/internal/store"
+	"github.com/mngeow/heimdall/internal/config"
+	"github.com/mngeow/heimdall/internal/store"
 )
 
 func TestParser(t *testing.T) {
@@ -21,13 +21,13 @@ func TestParser(t *testing.T) {
 	}{
 		{
 			name:     "status command",
-			comment:  "/symphony status",
+			comment:  "/heimdall status",
 			expected: "status",
 			isValid:  true,
 		},
 		{
 			name:     "refine command",
-			comment:  "/symphony refine Add error handling",
+			comment:  "/heimdall refine Add error handling",
 			expected: "refine",
 			isValid:  true,
 		},
@@ -177,7 +177,7 @@ func TestIntakeProcess(t *testing.T) {
 	})
 
 	t.Run("edited command stays duplicate by identity", func(t *testing.T) {
-		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", "alice", "/symphony refine updated text")
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", "alice", "/heimdall refine updated text")
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}
@@ -187,7 +187,7 @@ func TestIntakeProcess(t *testing.T) {
 	})
 
 	t.Run("unauthorized command is rejected", func(t *testing.T) {
-		result, err := intake.Process(ctx, repoConfig, pr, "IC_2", "mallory", "/symphony status")
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_2", "mallory", "/heimdall status")
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}

@@ -1,6 +1,6 @@
 ## 1. Project Bootstrap
 
-- [x] 1.1 Initialize the Go module, repository package layout, and `cmd/symphony/main.go` entrypoint.
+- [x] 1.1 Initialize the Go module, repository package layout, and `cmd/heimdall/main.go` entrypoint.
 - [x] 1.2 Implement config loading for file-backed settings and environment-backed secrets.
 - [x] 1.3 Implement startup validation for required local executables: `git`, `openspec`, and `opencode`.
 - [x] 1.4 Add structured logger bootstrap plus `/healthz` and `/readyz` HTTP endpoints.
@@ -35,10 +35,10 @@
 
 ## 6. Pull Request Command Workflows
 
-- [x] 6.1 Implement parsing for `/symphony status`, `/symphony refine`, and `/opsx-apply` commands.
+- [x] 6.1 Implement parsing for `/heimdall status`, `/heimdall refine`, and `/opsx-apply` commands.
 - [x] 6.2 Implement command authorization, deduplication, and queue handoff using persisted command requests.
-- [x] 6.3 Implement `/symphony status` responses for Symphony-managed pull requests.
-- [x] 6.4 Implement `/symphony refine` execution using the repository default spec-writing agent.
+- [x] 6.3 Implement `/heimdall status` responses for Heimdall-managed pull requests.
+- [x] 6.4 Implement `/heimdall refine` execution using the repository default spec-writing agent.
 - [x] 6.5 Implement `/opsx-apply` execution with allowlisted agent selection and PR feedback comments.
 
 ## 7. Gherkin Behavior Tests

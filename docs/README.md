@@ -1,14 +1,14 @@
-# Symphony Design Docs
+# Heimdall Design Docs
 
-Symphony is a Linux-hosted Go service that turns kanban movement into OpenSpec-driven engineering work.
+Heimdall is a Linux-hosted Go service that turns kanban movement into OpenSpec-driven engineering work.
 
-In the initial design, Symphony:
+In the initial design, Heimdall:
 - polls Linear for issues entering an active state
 - creates a git branch for the target repository
 - generates an OpenSpec change from the issue title and description
 - commits and pushes the generated spec artifacts
 - opens a GitHub pull request to `main`
-- polls GitHub for new PR comments on Symphony-managed pull requests so it can refine specs or run `/opsx-apply` with an allowed agent
+- polls GitHub for new PR comments on Heimdall-managed pull requests so it can refine specs or run `/opsx-apply` with an allowed agent
 - commits any resulting changes back to the same branch
 
 ## Confirmed V1 Decisions
@@ -33,7 +33,7 @@ Linear and GitHub PR command intake are both polling-based in V1, so the standar
 - `workflows.md`: end-to-end flows for issue activation, spec refinement, and apply execution
 - `authentication.md`: GitHub App, Linear key, command authorization, and secret handling
 - `operations.md`: deployment, configuration, filesystem layout, observability, and recovery
-- `logging.md`: logging strategy, log fields, retention, and how to view Symphony logs
+- `logging.md`: logging strategy, log fields, retention, and how to view Heimdall logs
 - `extensibility.md`: how V1 stays ready for Jira, other SCMs, and remote execution later
 - `setup/README.md`: operator setup order for Linux host, GitHub, and Linear
 - `setup/github.md`: exact GitHub App, polling, and repository setup

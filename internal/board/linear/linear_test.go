@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mngeow/symphony/internal/store"
+	"github.com/mngeow/heimdall/internal/store"
 )
 
 var testPollTime = time.Date(2026, time.April, 5, 10, 0, 0, 0, time.UTC)
