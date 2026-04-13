@@ -9,6 +9,7 @@ This is a cross-cutting workflow change. It affects activation orchestration, re
 **Goals:**
 - Replace the activation bootstrap mutation with activation-triggered OpenSpec proposal generation.
 - Create deterministic branch and change identities from the activated work item so retries reconcile instead of duplicating work.
+- Recover cleanly from partially failed activation attempts by reconciling stale git worktree registrations and reusing the deterministic proposal workspace on retry.
 - Use a configurable repository-level spec-writing agent for activation proposal generation.
 - Commit and push the generated OpenSpec artifacts, then open or reuse a proposal PR that carries the configured GitHub monitor label when present.
 - Keep activation, refine, and apply responsibilities clearly separated: activation proposes, refine edits artifacts, apply implements tasks.
@@ -71,14 +72,18 @@ Alternatives considered:
 ### Decision: Worktree, branch, change, and PR reconciliation remain idempotent
 Activation retries will first reconcile existing bindings. If a workflow binding already exists for the work item and repository, Heimdall will reuse the existing worktree, branch, change name, and pull request instead of creating another proposal run.
 
+When no active binding exists yet, Heimdall will still treat the deterministic branch and worktree identity as recoverable state. If a prior failed run already registered the branch or worktree in git, Heimdall will reconcile that existing state before trying to create a new worktree so the retry can continue without colliding with stale git metadata.
+
 Rationale:
 - preserves the current reconcile-before-create operating model
 - avoids duplicate change directories and competing pull requests for the same Linear issue
 - keeps recovery and repeated polling safe
+- prevents manually prunable git worktree entries from blocking the next activation retry
 
 Alternatives considered:
 - Always rerun proposal generation on every active-state observation. Rejected because it would create duplicate work and noisy PR churn.
 - Deduplicate only at the pull request layer. Rejected because branch and change naming would still collide earlier in the flow.
+- Require operators to manually run `git worktree prune` or remove stale worktree metadata after failed activation attempts. Rejected because the activation workflow should self-heal common retry collisions.
 
 ### Decision: Proposal PR publishing reuses the existing monitor-label mechanism
 The activation proposal PR title and body will reflect the source issue and generated change, while GitHub reconciliation will continue to apply the repository's configured PR monitor label when one is set.
@@ -107,14 +112,16 @@ Alternatives considered:
 - Deterministic change names can become stale if a ticket title changes after activation -> Mitigation: derive the name once for the first successful activation binding and reuse it on retries.
 - Generating full proposal artifacts during activation increases runtime compared with the old bootstrap file flow -> Mitigation: keep the workflow scoped to artifact generation only and continue using local worktrees and reconcile-before-create behavior.
 - OpenSpec readiness checks introduce more CLI calls -> Mitigation: rely on JSON status and instructions responses rather than adding custom filesystem inference or extra orchestration layers.
+- Retry recovery now depends on both git worktree metadata and workflow state -> Mitigation: reconcile deterministic branch/worktree identities explicitly before worktree creation and cover stale-registration recovery in behavior tests.
 
 ## Migration Plan
 
 1. Update the activation workflow contract, configuration docs, and durable specs from bootstrap PR creation to activation-triggered OpenSpec proposal generation.
 2. Add repository configuration loading and validation for the default spec-writing agent.
 3. Extend the activation executor to derive deterministic change names, create or reuse the change through `openspec`, inspect CLI JSON status, and invoke `opencode` with the configured agent.
-4. Update git and GitHub publishing so generated OpenSpec artifacts are committed, pushed, and opened as proposal PRs with the existing monitor label behavior.
-5. Add and run behavior tests that cover proposal generation success, no-change failure, repeated activation reconciliation, configuration validation, and PR publishing.
+4. Extend git worktree reconciliation so retries prune stale registered worktrees and recover incomplete failed attempts before deterministic worktree creation is retried.
+5. Update git and GitHub publishing so generated OpenSpec artifacts are committed, pushed, and opened as proposal PRs with the existing monitor label behavior.
+6. Add and run behavior tests that cover proposal generation success, no-change failure, repeated activation reconciliation, stale-worktree recovery, configuration validation, and PR publishing.
 
 Rollback is straightforward because the change stays within the existing activation workflow boundary. Reverting the implementation can restore the earlier bootstrap path without changing the surrounding polling, worktree, or PR ownership model.
 

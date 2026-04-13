@@ -39,16 +39,17 @@ type WorkItemEvent struct {
 
 // Repository represents a managed repository
 type Repository struct {
-	ID              int64
-	Provider        string
-	RepoRef         string
-	Owner           string
-	Name            string
-	DefaultBranch   string
-	BranchPrefix    string
-	PRMonitorLabel  string
-	LocalMirrorPath string
-	IsActive        bool
+	ID                      int64
+	Provider                string
+	RepoRef                 string
+	Owner                   string
+	Name                    string
+	DefaultBranch           string
+	BranchPrefix            string
+	PRMonitorLabel          string
+	LocalMirrorPath         string
+	DefaultSpecWritingAgent string
+	IsActive                bool
 }
 
 // RepoBinding represents the binding between a work item and repository
@@ -173,10 +174,10 @@ func (s *Store) SaveWorkItem(ctx context.Context, item *WorkItem) error {
 func (s *Store) GetRepositoryByID(ctx context.Context, repositoryID int64) (*Repository, error) {
 	var repo Repository
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, provider, repo_ref, owner, name, default_branch, branch_prefix, pr_monitor_label, local_mirror_path, is_active
+		`SELECT id, provider, repo_ref, owner, name, default_branch, branch_prefix, pr_monitor_label, local_mirror_path, default_spec_writing_agent, is_active
 		 FROM repositories WHERE id = ?`,
 		repositoryID,
-	).Scan(&repo.ID, &repo.Provider, &repo.RepoRef, &repo.Owner, &repo.Name, &repo.DefaultBranch, &repo.BranchPrefix, &repo.PRMonitorLabel, &repo.LocalMirrorPath, &repo.IsActive)
+	).Scan(&repo.ID, &repo.Provider, &repo.RepoRef, &repo.Owner, &repo.Name, &repo.DefaultBranch, &repo.BranchPrefix, &repo.PRMonitorLabel, &repo.LocalMirrorPath, &repo.DefaultSpecWritingAgent, &repo.IsActive)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -203,10 +204,10 @@ func (s *Store) SaveWorkItemEvent(ctx context.Context, event *WorkItemEvent) err
 func (s *Store) GetRepositoryByRef(ctx context.Context, repoRef string) (*Repository, error) {
 	var repo Repository
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, provider, repo_ref, owner, name, default_branch, branch_prefix, pr_monitor_label, local_mirror_path, is_active
+		`SELECT id, provider, repo_ref, owner, name, default_branch, branch_prefix, pr_monitor_label, local_mirror_path, default_spec_writing_agent, is_active
 		 FROM repositories WHERE repo_ref = ?`,
 		repoRef,
-	).Scan(&repo.ID, &repo.Provider, &repo.RepoRef, &repo.Owner, &repo.Name, &repo.DefaultBranch, &repo.BranchPrefix, &repo.PRMonitorLabel, &repo.LocalMirrorPath, &repo.IsActive)
+	).Scan(&repo.ID, &repo.Provider, &repo.RepoRef, &repo.Owner, &repo.Name, &repo.DefaultBranch, &repo.BranchPrefix, &repo.PRMonitorLabel, &repo.LocalMirrorPath, &repo.DefaultSpecWritingAgent, &repo.IsActive)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -219,15 +220,16 @@ func (s *Store) GetRepositoryByRef(ctx context.Context, repoRef string) (*Reposi
 
 func (s *Store) SaveRepository(ctx context.Context, repo *Repository) error {
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO repositories (provider, repo_ref, owner, name, default_branch, branch_prefix, pr_monitor_label, local_mirror_path, is_active)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO repositories (provider, repo_ref, owner, name, default_branch, branch_prefix, pr_monitor_label, local_mirror_path, default_spec_writing_agent, is_active)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(repo_ref) DO UPDATE SET
 		 default_branch = excluded.default_branch,
 		 branch_prefix = excluded.branch_prefix,
 		 pr_monitor_label = excluded.pr_monitor_label,
 		 local_mirror_path = excluded.local_mirror_path,
+		 default_spec_writing_agent = excluded.default_spec_writing_agent,
 		 is_active = excluded.is_active`,
-		repo.Provider, repo.RepoRef, repo.Owner, repo.Name, repo.DefaultBranch, repo.BranchPrefix, repo.PRMonitorLabel, repo.LocalMirrorPath, repo.IsActive,
+		repo.Provider, repo.RepoRef, repo.Owner, repo.Name, repo.DefaultBranch, repo.BranchPrefix, repo.PRMonitorLabel, repo.LocalMirrorPath, repo.DefaultSpecWritingAgent, repo.IsActive,
 	)
 	if err != nil {
 		return err

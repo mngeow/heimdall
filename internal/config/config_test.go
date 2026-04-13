@@ -151,6 +151,34 @@ func TestLoadFromDirRejectsEmptyRepoPRMonitorLabel(t *testing.T) {
 	}
 }
 
+func TestLoadFromDirRequiresDefaultSpecWritingAgent(t *testing.T) {
+	clearHeimdallEnv(t)
+	projectRoot := t.TempDir()
+	writeTestFile(t, filepath.Join(projectRoot, ".env"), strings.ReplaceAll(validDotenv("main"), "HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT=gpt-5.4\n", ""))
+
+	_, err := LoadFromDir(projectRoot)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT") {
+		t.Fatalf("expected default spec-writing agent validation error, got %v", err)
+	}
+}
+
+func TestLoadFromDirRejectsEmptyDefaultSpecWritingAgent(t *testing.T) {
+	clearHeimdallEnv(t)
+	projectRoot := t.TempDir()
+	writeTestFile(t, filepath.Join(projectRoot, ".env"), validDotenvWithExtra("main", "HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT=   "))
+
+	_, err := LoadFromDir(projectRoot)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT") {
+		t.Fatalf("expected empty default spec-writing agent validation error, got %v", err)
+	}
+}
+
 func clearHeimdallEnv(t *testing.T) {
 	t.Helper()
 
@@ -189,28 +217,29 @@ func clearHeimdallEnv(t *testing.T) {
 
 func validEnvMap(baseBranch string) map[string]string {
 	return map[string]string{
-		"HEIMDALL_SERVER_LISTEN_ADDRESS":           ":8080",
-		"HEIMDALL_SERVER_PUBLIC_URL":               "http://127.0.0.1:8080",
-		"HEIMDALL_STORAGE_DRIVER":                  "sqlite",
-		"HEIMDALL_STORAGE_DSN":                     "/tmp/heimdall.db",
-		"HEIMDALL_LINEAR_POLL_INTERVAL":            "30s",
-		"HEIMDALL_LINEAR_ACTIVE_STATES":            "In Progress",
-		"HEIMDALL_LINEAR_PROJECT_NAME":             "Core Platform",
-		"HEIMDALL_LINEAR_API_TOKEN":                "linear-token",
-		"HEIMDALL_GITHUB_BASE_BRANCH":              baseBranch,
-		"HEIMDALL_GITHUB_POLL_INTERVAL":            "30s",
-		"HEIMDALL_GITHUB_LOOKBACK_WINDOW":          "2m",
-		"HEIMDALL_GITHUB_APP_ID":                   "12345",
-		"HEIMDALL_GITHUB_INSTALLATION_ID":          "99",
-		"HEIMDALL_GITHUB_PRIVATE_KEY":              "test-private-key",
-		"HEIMDALL_REPOS":                           "PLATFORM",
-		"HEIMDALL_REPO_PLATFORM_NAME":              "github.com/acme/platform",
-		"HEIMDALL_REPO_PLATFORM_LOCAL_MIRROR_PATH": "/var/lib/heimdall/repos/github.com/acme/platform.git",
-		"HEIMDALL_REPO_PLATFORM_DEFAULT_BRANCH":    "main",
-		"HEIMDALL_REPO_PLATFORM_BRANCH_PREFIX":     "heimdall",
-		"HEIMDALL_REPO_PLATFORM_LINEAR_TEAM_KEYS":  "ENG",
-		"HEIMDALL_REPO_PLATFORM_ALLOWED_AGENTS":    "gpt-5.4,claude-sonnet",
-		"HEIMDALL_REPO_PLATFORM_ALLOWED_USERS":     "mngeow",
+		"HEIMDALL_SERVER_LISTEN_ADDRESS":                    ":8080",
+		"HEIMDALL_SERVER_PUBLIC_URL":                        "http://127.0.0.1:8080",
+		"HEIMDALL_STORAGE_DRIVER":                           "sqlite",
+		"HEIMDALL_STORAGE_DSN":                              "/tmp/heimdall.db",
+		"HEIMDALL_LINEAR_POLL_INTERVAL":                     "30s",
+		"HEIMDALL_LINEAR_ACTIVE_STATES":                     "In Progress",
+		"HEIMDALL_LINEAR_PROJECT_NAME":                      "Core Platform",
+		"HEIMDALL_LINEAR_API_TOKEN":                         "linear-token",
+		"HEIMDALL_GITHUB_BASE_BRANCH":                       baseBranch,
+		"HEIMDALL_GITHUB_POLL_INTERVAL":                     "30s",
+		"HEIMDALL_GITHUB_LOOKBACK_WINDOW":                   "2m",
+		"HEIMDALL_GITHUB_APP_ID":                            "12345",
+		"HEIMDALL_GITHUB_INSTALLATION_ID":                   "99",
+		"HEIMDALL_GITHUB_PRIVATE_KEY":                       "test-private-key",
+		"HEIMDALL_REPOS":                                    "PLATFORM",
+		"HEIMDALL_REPO_PLATFORM_NAME":                       "github.com/acme/platform",
+		"HEIMDALL_REPO_PLATFORM_LOCAL_MIRROR_PATH":          "/var/lib/heimdall/repos/github.com/acme/platform.git",
+		"HEIMDALL_REPO_PLATFORM_DEFAULT_BRANCH":             "main",
+		"HEIMDALL_REPO_PLATFORM_BRANCH_PREFIX":              "heimdall",
+		"HEIMDALL_REPO_PLATFORM_LINEAR_TEAM_KEYS":           "ENG",
+		"HEIMDALL_REPO_PLATFORM_ALLOWED_AGENTS":             "gpt-5.4,claude-sonnet",
+		"HEIMDALL_REPO_PLATFORM_ALLOWED_USERS":              "mngeow",
+		"HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT": "gpt-5.4",
 	}
 }
 

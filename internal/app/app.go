@@ -73,7 +73,7 @@ func New(ctx context.Context) (*App, error) {
 
 	queue := store.NewJobQueue(runtimeStore)
 	repoManager := repo.NewManager("")
-	bootstrapRunner := internalexec.NewOpenCodeBootstrapRunner()
+	proposalRunner := internalexec.NewOpenCodeProposalRunner()
 
 	return &App{
 		config:         cfg,
@@ -85,7 +85,7 @@ func New(ctx context.Context) (*App, error) {
 		workflowQueue:  queue,
 		router:         workflow.NewRouter(cfg.Repos),
 		commandIntake:  slashcmd.NewIntake(runtimeStore, queue, logger),
-		activationFlow: workflow.NewBootstrapWorkflow(runtimeStore, repoManager, githubClient, bootstrapRunner, logger),
+		activationFlow: workflow.NewProposalWorkflow(runtimeStore, repoManager, githubClient, internalexec.NewOpenSpecClient(""), proposalRunner, logger),
 		ready:          false,
 	}, nil
 }
@@ -272,15 +272,13 @@ func (a *App) startBootstrapWorkflow(ctx context.Context, item linear.WorkItem) 
 		return nil
 	}
 
-	slug := workflow.SlugFromDescriptionOrTitle(workItem.Description, workItem.Title)
-	changeName := workflow.GenerateChangeName(item.Key, slug)
-	branchName := workflow.GenerateBranchName(repository.BranchPrefix, item.Key, slug)
-	run, err := workflow.CreateBootstrapWorkflowRun(ctx, a.store, workItem.ID, repository, changeName, branchName)
+	branchName := workflow.GenerateBranchName(repository.BranchPrefix, item.Key, workItem.Title)
+	run, err := workflow.CreateProposalWorkflowRun(ctx, a.store, workItem.ID, repository, branchName)
 	if err != nil {
-		return fmt.Errorf("failed to create bootstrap workflow run for %s: %w", item.Key, err)
+		return fmt.Errorf("failed to create proposal workflow run for %s: %w", item.Key, err)
 	}
 	a.logger.Info(
-		"created activation bootstrap workflow run",
+		"created activation proposal workflow run",
 		"workflow_run_id", run.ID,
 		"work_item_key", item.Key,
 		"repository", repository.RepoRef,
@@ -289,10 +287,10 @@ func (a *App) startBootstrapWorkflow(ctx context.Context, item linear.WorkItem) 
 	)
 
 	if err := a.activationFlow.Execute(ctx, run.ID); err != nil {
-		return fmt.Errorf("failed to execute bootstrap workflow for %s: %w", item.Key, err)
+		return fmt.Errorf("failed to execute proposal workflow for %s: %w", item.Key, err)
 	}
 
-	a.logger.Info("completed activation bootstrap workflow", "workflow_run_id", run.ID, "work_item_key", item.Key, "repository", repository.RepoRef, "branch", branchName, "step", "workflow_complete")
+	a.logger.Info("completed activation proposal workflow", "workflow_run_id", run.ID, "work_item_key", item.Key, "repository", repository.RepoRef, "branch", branchName, "step", "workflow_complete")
 	return nil
 }
 
@@ -314,15 +312,16 @@ func syncConfiguredRepositories(ctx context.Context, runtimeStore *store.Store, 
 		}
 
 		repository := &store.Repository{
-			Provider:        "github",
-			RepoRef:         repoConfig.Name,
-			Owner:           owner,
-			Name:            name,
-			DefaultBranch:   repoConfig.DefaultBranch,
-			BranchPrefix:    repoConfig.BranchPrefix,
-			PRMonitorLabel:  repoConfig.PRMonitorLabel,
-			LocalMirrorPath: repoConfig.LocalMirrorPath,
-			IsActive:        true,
+			Provider:                "github",
+			RepoRef:                 repoConfig.Name,
+			Owner:                   owner,
+			Name:                    name,
+			DefaultBranch:           repoConfig.DefaultBranch,
+			BranchPrefix:            repoConfig.BranchPrefix,
+			PRMonitorLabel:          repoConfig.PRMonitorLabel,
+			LocalMirrorPath:         repoConfig.LocalMirrorPath,
+			DefaultSpecWritingAgent: repoConfig.DefaultSpecWritingAgent,
+			IsActive:                true,
 		}
 		if repository.DefaultBranch == "" {
 			repository.DefaultBranch = "main"

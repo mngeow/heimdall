@@ -70,6 +70,7 @@ HEIMDALL_REPO_PLATFORM_BRANCH_PREFIX=heimdall
 HEIMDALL_REPO_PLATFORM_LINEAR_TEAM_KEYS=ENG
 HEIMDALL_REPO_PLATFORM_ALLOWED_AGENTS=gpt-5.4,claude-sonnet
 HEIMDALL_REPO_PLATFORM_ALLOWED_USERS=mngeow
+HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT=gpt-5.4
 HEIMDALL_REPO_PLATFORM_PR_MONITOR_LABEL=heimdall-monitored
 ```
 
@@ -79,6 +80,7 @@ Notes:
 - Linear polling in v1 is scoped to the configured project name in `HEIMDALL_LINEAR_PROJECT_NAME`
 - if only one repo is configured, routing may skip team matching
 - if multiple repos are configured, routing rules should be explicit and validated at startup
+- `HEIMDALL_REPO_<ID>_DEFAULT_SPEC_WRITING_AGENT` is required for each managed repository and is used for activation-triggered proposal generation and `/heimdall refine`
 - GitHub polling should be scoped to managed repositories and managed pull requests to control API volume
 - `public_url` does not need to be Internet-reachable when GitHub polling is used; a private or local operator URL is enough if the field is needed at all
 - use file-path settings such as `HEIMDALL_GITHUB_PRIVATE_KEY_FILE` when multiline secrets should stay outside the `.env` file

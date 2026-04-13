@@ -38,6 +38,16 @@ cp dist.env .env
 ./heimdall
 ```
 
+### Initialize A Local SQLite DB
+
+```bash
+# Creates tmp/local-dev.db and applies the Heimdall schema
+scripts/new-sqlite-db.sh local-dev
+
+# Creates /tmp/heimdall-dev.db and applies the Heimdall schema
+scripts/new-sqlite-db.sh /tmp/heimdall-dev.db
+```
+
 ### Configuration
 
 Copy `dist.env` to `.env` in the project root and edit the values for your environment:
@@ -71,11 +81,13 @@ HEIMDALL_REPO_PLATFORM_BRANCH_PREFIX=heimdall
 HEIMDALL_REPO_PLATFORM_LINEAR_TEAM_KEYS=ENG
 HEIMDALL_REPO_PLATFORM_ALLOWED_AGENTS=gpt-5.4,claude-sonnet
 HEIMDALL_REPO_PLATFORM_ALLOWED_USERS=your-github-username
+HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT=gpt-5.4
 HEIMDALL_REPO_PLATFORM_PR_MONITOR_LABEL=heimdall-monitored
 ```
 
 The local `.env` file is ignored by git. `dist.env` stays committed as the supported settings template.
 For v1, Linear polling is scoped to the configured project name in `HEIMDALL_LINEAR_PROJECT_NAME`.
+Each managed repository must declare `HEIMDALL_REPO_<ID>_DEFAULT_SPEC_WRITING_AGENT`, which is used for activation-triggered OpenSpec proposal generation and `/heimdall refine`.
 
 ### Running
 

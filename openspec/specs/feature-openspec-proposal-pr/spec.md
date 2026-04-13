@@ -2,42 +2,59 @@
 
 ## ADDED Requirements
 
-### Requirement: Activation bootstrap is seeded from work item content
-Heimdall MUST extract the activated work item's title and description and MUST use that content as the seed for the activation-triggered bootstrap pull request flow.
-
-#### Scenario: Heimdall prepares a bootstrap run from an activated issue
-- **WHEN** Heimdall handles an activated work item that does not yet have an active automation binding in the target repository
-- **THEN** it extracts the work item title and description for the bootstrap prompt context
-- **AND** it passes that context into the local OpenCode execution that will create the initial repository change
-
-### Requirement: Initial activation bootstrap does not require OpenSpec change creation
-Heimdall MUST NOT depend on OpenSpec change creation or OpenSpec artifact generation to complete the initial activation-triggered bootstrap pull request flow.
-
-#### Scenario: Activation bootstrap is prepared for execution
-- **WHEN** Heimdall prepares the activation-triggered bootstrap workflow for a routed work item
-- **THEN** it does not require an OpenSpec change to exist before creating the branch and worktree
-- **AND** it proceeds by invoking the local OpenCode bootstrap execution directly from the issue seed data
-
 ### Requirement: Branches are deterministic
-Heimdall MUST use deterministic branch naming for activation bootstrap so retries reconcile existing work instead of creating duplicate work branches.
+Heimdall MUST use deterministic branch naming for activation-triggered OpenSpec proposal generation so retries reconcile existing work instead of creating duplicate work branches.
 
 #### Scenario: Heimdall creates a branch name for an activated work item
-- **WHEN** Heimdall prepares a bootstrap branch for work item `ENG-123` whose description yields slug `add-rate-limiting`
+- **WHEN** Heimdall prepares a proposal branch for work item `ENG-123` whose description yields slug `add-rate-limiting`
 - **THEN** it names the branch `heimdall/ENG-123-add-rate-limiting`
 - **AND** it reuses that same branch identity on later retries for the same work item and repository
 
-### Requirement: Bootstrap changes are committed, pushed, and opened as a pull request
-Heimdall MUST commit the activation-triggered bootstrap changes to the branch, push the branch to GitHub, and open or reuse a pull request against the configured base branch.
+### Requirement: Activation proposal is seeded from work item content
+Heimdall MUST extract the activated work item's title and description and MUST use that content as the seed for activation-triggered OpenSpec proposal generation.
 
-#### Scenario: Heimdall completes bootstrap scaffolding for a work item
-- **WHEN** Heimdall finishes the activation-triggered OpenCode bootstrap execution for a routed work item and repository changes exist
-- **THEN** it commits and pushes the bootstrap branch
+#### Scenario: Heimdall prepares proposal generation from an activated issue
+- **WHEN** Heimdall handles an activated work item that does not yet have an active automation binding in the target repository
+- **THEN** it extracts the work item title and description for proposal-generation context
+- **AND** it passes that context and the deterministic change name into the local OpenCode execution that will create or update the OpenSpec change artifacts
+
+### Requirement: Activation proposal creates or reuses an OpenSpec change before artifact generation
+Heimdall MUST create or reuse a deterministic OpenSpec change in the repository worktree before generating activation proposal artifacts, and MUST use OpenSpec CLI status and instruction output to determine which artifacts are required for implementation readiness.
+
+#### Scenario: Heimdall prepares proposal generation for an activated issue
+- **WHEN** Heimdall prepares the activation-triggered proposal workflow for work item `ENG-123`
+- **THEN** it creates or reuses the OpenSpec change `eng-123-add-rate-limiting`
+- **AND** it reads OpenSpec CLI status and artifact instructions before generating the change artifacts
+
+### Requirement: Activation proposal uses deterministic change names
+Heimdall MUST derive a deterministic OpenSpec change name from the activated work item's key and normalized slug so retries and later pull request commands target the same change.
+
+#### Scenario: Heimdall creates a change name for an activated work item
+- **WHEN** Heimdall prepares a change name for work item `ENG-123` whose title yields slug `add-rate-limiting`
+- **THEN** it names the change `eng-123-add-rate-limiting`
+- **AND** it reuses that same change identity on later retries for the same work item and repository
+
+### Requirement: Activation proposal artifacts are committed, pushed, and opened as a pull request
+Heimdall MUST commit the activation-triggered OpenSpec proposal artifacts to the branch, push the branch to GitHub, and open or reuse a pull request against the configured base branch.
+
+#### Scenario: Heimdall completes proposal generation for a work item
+- **WHEN** Heimdall finishes the activation-triggered OpenSpec proposal execution for a routed work item and repository changes exist
+- **THEN** it commits and pushes the proposal branch
 - **AND** it opens or reuses a pull request targeting the configured base branch
 
-### Requirement: Bootstrap pull requests preserve source issue context
-Heimdall MUST publish a pull request title and description that reflect the source issue and the generated bootstrap change.
+### Requirement: Activation proposal retries recover incomplete deterministic workspaces
+Heimdall MUST treat the deterministic activation proposal branch and worktree as recoverable workflow state even when a prior activation run failed before the proposal binding became active.
 
-#### Scenario: Bootstrap pull request is opened
-- **WHEN** Heimdall creates or reuses the bootstrap pull request for a work item
-- **THEN** the pull request title references the issue title
-- **AND** the pull request description includes the issue description and a short summary of the generated bootstrap change
+#### Scenario: A retry continues from a partially prepared proposal workspace
+- **WHEN** a previous activation attempt already created or registered the deterministic proposal branch or worktree for a work item
+- **AND** that earlier attempt failed before the proposal branch was committed, pushed, or bound as active
+- **THEN** Heimdall reuses or repairs that deterministic workspace on retry instead of treating it as a brand-new branch/worktree request
+- **AND** later proposal commit, push, and pull request steps still target the same deterministic proposal branch identity
+
+### Requirement: Activation proposal pull requests preserve source issue context
+Heimdall MUST publish a pull request title and description that reflect the source issue and the generated OpenSpec change.
+
+#### Scenario: Activation proposal pull request is opened
+- **WHEN** Heimdall creates or reuses the activation proposal pull request for a work item
+- **THEN** the pull request title references the issue title and indicates that the branch contains an OpenSpec proposal
+- **AND** the pull request description includes the issue description, the generated change name, and a short summary of the generated OpenSpec artifacts

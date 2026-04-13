@@ -3,6 +3,7 @@ install_mode = "copy"
 skills_source_root = "/Users/mngeow/Projects/hermes/repo"
 agents_source_root = "/Users/mngeow/Projects/hermes/agents"
 skills = []
+commands = []
 
 [[agents]]
 name = "backend-software-architect"

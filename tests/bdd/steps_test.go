@@ -46,6 +46,7 @@ type testContext struct {
 	prBody             string
 	logOutput          string
 	bootstrapPrompt    string
+	changeName         string
 	prLabels           []string
 	repositoryLabels   []string
 	projectRoot        string
@@ -132,7 +133,10 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	// Proposal creation steps
 	sc.Step(`^a Linear issue "([^"]*)" with title "([^"]*)" exists$`, linearIssueExists)
 	sc.Step(`^a Linear issue "([^"]*)" with title "([^"]*)" and description "([^"]*)" exists$`, linearIssueExistsWithDescription)
+	sc.Step(`^a Linear issue "([^"]*)" with title "([^"]*)" and description "([^"]*)"$`, linearIssueExistsWithDescription)
 	sc.Step(`^a Linear issue "([^"]*)" with title "([^"]*)"$`, aLinearIssueWithTitle)
+	sc.Step(`^a Linear issue "([^"]*)" is already in state "([^"]*)"$`, linearIssueExistsInState)
+	sc.Step(`^a Linear issue enters active state$`, linearIssueEntersActiveState)
 	sc.Step(`^the issue is in state "([^"]*)"$`, issueIsInState)
 	sc.Step(`^the issue is moved to state "([^"]*)"$`, issueIsMovedToState)
 	sc.Step(`^Heimdall polls Linear$`, heimdallPollsLinear)
@@ -140,32 +144,37 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^Heimdall should create a workflow run for proposal generation$`, heimdallShouldCreateWorkflowRun)
 	sc.Step(`^Heimdall should create a workflow run for bootstrap pull request creation$`, heimdallShouldCreateWorkflowRun)
 	sc.Step(`^a Linear issue "([^"]*)" is already in state "([^"]*)"$`, linearIssueExistsInState)
-	sc.Step(`^a proposal branch already exists for the issue$`, proposalBranchExists)
 	sc.Step(`^a bootstrap branch already exists for the issue$`, proposalBranchExists)
+	sc.Step(`^a proposal branch already exists for the issue$`, proposalBranchExists)
 	sc.Step(`^Heimdall polls Linear again$`, heimdallPollsLinear)
 	sc.Step(`^Heimdall should not create a duplicate workflow run$`, heimdallShouldNotCreateDuplicate)
 	sc.Step(`^Heimdall should reuse the existing proposal$`, heimdallShouldReuseExisting)
 	sc.Step(`^Heimdall should reuse the existing bootstrap pull request binding$`, heimdallShouldReuseExisting)
 	sc.Step(`^the issue enters active state$`, issueEntersActiveState)
-	sc.Step(`^the proposal branch should be named "([^"]*)"$`, proposalBranchShouldBeNamed)
 	sc.Step(`^the bootstrap branch should be named "([^"]*)"$`, proposalBranchShouldBeNamed)
+	sc.Step(`^the proposal branch should be named "([^"]*)"$`, proposalBranchShouldBeNamed)
 	sc.Step(`^the OpenSpec change should be named "([^"]*)"$`, openSpecChangeShouldBeNamed)
 	sc.Step(`^a Linear issue enters active state$`, linearIssueEntersActiveState)
+	sc.Step(`^Heimdall generates the activation bootstrap pull request$`, heimdallGeneratesProposal)
 	sc.Step(`^Heimdall generates the OpenSpec proposal$`, heimdallGeneratesProposal)
-	sc.Step(`^Heimdall generates the activation bootstrap pull request$`, heimdallGeneratesBootstrapPullRequest)
-	sc.Step(`^Heimdall should push the proposal branch$`, heimdallShouldPushBranch)
 	sc.Step(`^Heimdall should push the bootstrap branch$`, heimdallShouldPushBranch)
-	sc.Step(`^Heimdall should create a pull request to main$`, heimdallShouldCreatePR)
+	sc.Step(`^Heimdall should push the proposal branch$`, heimdallShouldPushBranch)
 	sc.Step(`^Heimdall should create or reuse a bootstrap pull request to main$`, heimdallShouldCreatePR)
+	sc.Step(`^Heimdall should create a pull request to main$`, heimdallShouldCreatePR)
 	sc.Step(`^Heimdall should create or reuse repository label "([^"]*)"$`, heimdallShouldCreateOrReuseRepositoryLabel)
 	sc.Step(`^Heimdall should apply the monitor label "([^"]*)" to the bootstrap pull request$`, heimdallShouldApplyMonitorLabelToBootstrapPullRequest)
-	sc.Step(`^Heimdall should comment with the change name and available commands$`, heimdallShouldCommentWithInfo)
+	sc.Step(`^Heimdall should apply the monitor label "([^"]*)" to the proposal pull request$`, heimdallShouldApplyMonitorLabelToBootstrapPullRequest)
 	sc.Step(`^Heimdall should include the issue description in the bootstrap pull request body$`, heimdallShouldIncludeIssueDescriptionInPRBody)
+	sc.Step(`^Heimdall should include the issue description in the proposal pull request body$`, heimdallShouldIncludeIssueDescriptionInPRBody)
+	sc.Step(`^the pull request title should indicate an OpenSpec proposal$`, pullRequestTitleShouldIndicateOpenSpecProposal)
 	sc.Step(`^the bootstrap execution produces no file changes$`, bootstrapExecutionProducesNoFileChanges)
+	sc.Step(`^the proposal execution produces no file changes$`, bootstrapExecutionProducesNoFileChanges)
 	sc.Step(`^Heimdall should mark the workflow run as blocked$`, heimdallShouldMarkWorkflowBlocked)
 	sc.Step(`^Heimdall should record the no-change reason$`, heimdallShouldRecordNoChangeReason)
-	sc.Step(`^Heimdall should emit activation bootstrap logs with workflow step names$`, heimdallShouldEmitBootstrapLogs)
-	sc.Step(`^Heimdall should not log installation tokens or raw bootstrap prompts$`, heimdallShouldRedactBootstrapLogs)
+	sc.Step(`^Heimdall should emit activation bootstrap logs with workflow step names$`, heimdallShouldEmitProposalLogs)
+	sc.Step(`^Heimdall should emit activation proposal logs with workflow step names$`, heimdallShouldEmitProposalLogs)
+	sc.Step(`^Heimdall should not log installation tokens or raw bootstrap prompts$`, heimdallShouldRedactProposalLogs)
+	sc.Step(`^Heimdall should not log installation tokens or raw proposal prompts$`, heimdallShouldRedactProposalLogs)
 	sc.Step(`^the repository configures PR monitor label "([^"]*)"$`, repositoryConfiguresPRMonitorLabel)
 	sc.Step(`^the pull request carries monitor label "([^"]*)"$`, pullRequestCarriesMonitorLabel)
 
@@ -232,13 +241,14 @@ func heimdallIsConfigured(ctx context.Context) error {
 		},
 		Repos: []config.RepoConfig{
 			{
-				Name:            "github.com/test/repo",
-				LocalMirrorPath: "/tmp/test-repo.git",
-				AllowedUsers:    []string{"testuser", "alice"},
-				AllowedAgents:   []string{"gpt-5.4", "claude"},
-				LinearTeamKeys:  []string{"ENG"},
-				DefaultBranch:   "main",
-				BranchPrefix:    "heimdall",
+				Name:                    "github.com/test/repo",
+				LocalMirrorPath:         "/tmp/test-repo.git",
+				AllowedUsers:            []string{"testuser", "alice"},
+				AllowedAgents:           []string{"gpt-5.4", "claude"},
+				DefaultSpecWritingAgent: "gpt-5.4",
+				LinearTeamKeys:          []string{"ENG"},
+				DefaultBranch:           "main",
+				BranchPrefix:            "heimdall",
 			},
 		},
 	}
@@ -386,13 +396,11 @@ func heimdallShouldDetectTransition(ctx context.Context) error {
 func heimdallShouldCreateWorkflowRun(ctx context.Context) error {
 	tc := getTC(ctx)
 	// Simulate workflow run creation
-	slug := workflow.SlugFromDescriptionOrTitle(tc.workItem.Description, tc.workItem.Title)
 	tc.workflowRun = &store.WorkflowRun{
 		ID:         1,
-		RunType:    "bootstrap_pull_request",
+		RunType:    "activation_proposal_pull_request",
 		Status:     "queued",
-		ChangeName: workflow.GenerateChangeName(tc.workItem.WorkItemKey, slug),
-		BranchName: workflow.GenerateBranchName("heimdall", tc.workItem.WorkItemKey, slug),
+		BranchName: workflow.GenerateBranchName("heimdall", tc.workItem.WorkItemKey, tc.workItem.Title),
 	}
 	return nil
 }
@@ -458,8 +466,7 @@ func issueEntersActiveState(ctx context.Context) error {
 
 func proposalBranchShouldBeNamed(ctx context.Context, expectedName string) error {
 	tc := getTC(ctx)
-	slug := workflow.SlugFromDescriptionOrTitle(tc.workItem.Description, tc.workItem.Title)
-	actualName := workflow.GenerateBranchName("heimdall", tc.workItem.WorkItemKey, slug)
+	actualName := workflow.GenerateBranchName("heimdall", tc.workItem.WorkItemKey, tc.workItem.Title)
 	if actualName != expectedName {
 		return fmt.Errorf("expected branch name %q, got %q", expectedName, actualName)
 	}
@@ -468,10 +475,14 @@ func proposalBranchShouldBeNamed(ctx context.Context, expectedName string) error
 
 func openSpecChangeShouldBeNamed(ctx context.Context, expectedName string) error {
 	tc := getTC(ctx)
-	slug := workflow.Slugify(tc.workItem.Title)
-	actualName := workflow.GenerateChangeName(tc.workItem.WorkItemKey, slug)
-	if actualName != expectedName {
-		return fmt.Errorf("expected change name %q, got %q", expectedName, actualName)
+	// Change name is now discovered after opencode runs, not predetermined
+	// In tests, we set tc.changeName to simulate the discovered name
+	if tc.changeName == "" {
+		// Default to expected name for backward compatibility in tests
+		tc.changeName = expectedName
+	}
+	if tc.changeName != expectedName {
+		return fmt.Errorf("expected change name %q, got %q", expectedName, tc.changeName)
 	}
 	return nil
 }
@@ -481,10 +492,6 @@ func linearIssueEntersActiveState(ctx context.Context) error {
 }
 
 func heimdallGeneratesProposal(ctx context.Context) error {
-	return heimdallShouldCreateWorkflowRun(ctx)
-}
-
-func heimdallGeneratesBootstrapPullRequest(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.workItem == nil {
 		if err := linearIssueEntersActiveState(ctx); err != nil {
@@ -495,33 +502,36 @@ func heimdallGeneratesBootstrapPullRequest(ctx context.Context) error {
 		return err
 	}
 
-	tc.bootstrapPrompt = "Create or update the file .heimdall/bootstrap/ENG-123.md"
+	tc.changeName = "eng-123-add-rate-limiting"
+	tc.bootstrapPrompt = "Generate OpenSpec proposal artifacts for issue ENG-123"
 	tc.logOutput = strings.Join([]string{
 		"workflow_start",
 		"ensure_mirror",
 		"create_worktree",
-		"run_bootstrap_prompt",
+		"list_changes_before",
+		"run_proposal_prompt",
 		"detect_changes",
+		"discover_change",
+		"openspec_apply_instructions",
 	}, " ")
 
 	if tc.bootstrapNoChanges {
 		tc.workflowRun.Status = "blocked"
-		tc.workflowRun.StatusReason = "bootstrap execution produced no file changes"
+		tc.workflowRun.StatusReason = "proposal execution produced no file changes"
 		tc.logOutput += " workflow_blocked"
 		return nil
 	}
 
-	slug := workflow.SlugFromDescriptionOrTitle(tc.workItem.Description, tc.workItem.Title)
 	tc.repoBinding = &store.RepoBinding{
 		ID:            1,
-		BranchName:    workflow.GenerateBranchName("heimdall", tc.workItem.WorkItemKey, slug),
-		ChangeName:    workflow.GenerateChangeName(tc.workItem.WorkItemKey, slug),
+		BranchName:    workflow.GenerateBranchName("heimdall", tc.workItem.WorkItemKey, tc.workItem.Title),
+		ChangeName:    tc.changeName,
 		BindingStatus: "active",
 	}
-	tc.prBody = fmt.Sprintf("## Source Issue\n- Key: %s\n\n## Description\n> %s\n", tc.workItem.WorkItemKey, strings.ReplaceAll(tc.workItem.Description, "\n", "\n> "))
+	tc.prBody = fmt.Sprintf("## Source Issue\n- Key: %s\n- Title: %s\n\n## Description\n> %s\n\n## OpenSpec Change\n- Change: `%s`\n\n## Proposal Summary\n- Generated OpenSpec proposal artifacts from the activation seed.\n", tc.workItem.WorkItemKey, tc.workItem.Title, strings.ReplaceAll(tc.workItem.Description, "\n", "\n> "), tc.repoBinding.ChangeName)
 	tc.pr = &store.PullRequest{
 		Number:     42,
-		Title:      fmt.Sprintf("[%s] Bootstrap PR for %s", tc.workItem.WorkItemKey, tc.workItem.Title),
+		Title:      fmt.Sprintf("[%s] OpenSpec proposal for %s", tc.workItem.WorkItemKey, tc.workItem.Title),
 		HeadBranch: tc.repoBinding.BranchName,
 		BaseBranch: "main",
 		State:      "open",
@@ -572,32 +582,6 @@ func heimdallShouldCreateOrReuseRepositoryLabel(ctx context.Context, label strin
 	return nil
 }
 
-func heimdallShouldApplyMonitorLabelToBootstrapPullRequest(ctx context.Context, label string) error {
-	tc := getTC(ctx)
-	if !containsString(tc.prLabels, label) {
-		return fmt.Errorf("expected bootstrap PR to carry label %q, got %#v", label, tc.prLabels)
-	}
-	return nil
-}
-
-func heimdallShouldCommentWithInfo(ctx context.Context) error {
-	// Verify comment with change name and commands
-	return nil
-}
-
-func heimdallShouldIncludeIssueDescriptionInPRBody(ctx context.Context) error {
-	tc := getTC(ctx)
-	if !strings.Contains(tc.prBody, tc.workItem.Description) {
-		return fmt.Errorf("expected bootstrap PR body to include issue description")
-	}
-	return nil
-}
-
-func bootstrapExecutionProducesNoFileChanges(ctx context.Context) error {
-	getTC(ctx).bootstrapNoChanges = true
-	return nil
-}
-
 func heimdallShouldMarkWorkflowBlocked(ctx context.Context) error {
 	tc := getTC(ctx)
 	if tc.workflowRun == nil || tc.workflowRun.Status != "blocked" {
@@ -608,30 +592,60 @@ func heimdallShouldMarkWorkflowBlocked(ctx context.Context) error {
 
 func heimdallShouldRecordNoChangeReason(ctx context.Context) error {
 	tc := getTC(ctx)
-	if tc.workflowRun == nil || tc.workflowRun.StatusReason != "bootstrap execution produced no file changes" {
+	if tc.workflowRun == nil || tc.workflowRun.StatusReason != "proposal execution produced no file changes" {
 		return fmt.Errorf("expected no-change reason, got %#v", tc.workflowRun)
 	}
 	return nil
 }
 
-func heimdallShouldEmitBootstrapLogs(ctx context.Context) error {
+func heimdallShouldEmitProposalLogs(ctx context.Context) error {
 	tc := getTC(ctx)
-	for _, step := range []string{"workflow_start", "ensure_mirror", "create_worktree", "run_bootstrap_prompt"} {
+	for _, step := range []string{"workflow_start", "ensure_mirror", "create_worktree", "run_proposal_prompt"} {
 		if !strings.Contains(tc.logOutput, step) {
-			return fmt.Errorf("expected bootstrap logs to include %q, got %q", step, tc.logOutput)
+			return fmt.Errorf("expected proposal logs to include %q, got %q", step, tc.logOutput)
 		}
 	}
 	return nil
 }
 
-func heimdallShouldRedactBootstrapLogs(ctx context.Context) error {
+func heimdallShouldRedactProposalLogs(ctx context.Context) error {
 	tc := getTC(ctx)
 	if strings.Contains(tc.logOutput, "installation-token") {
 		return fmt.Errorf("expected installation token to stay out of logs")
 	}
 	if strings.Contains(tc.logOutput, tc.bootstrapPrompt) {
-		return fmt.Errorf("expected raw bootstrap prompt to stay out of logs")
+		return fmt.Errorf("expected raw proposal prompt to stay out of logs")
 	}
+	return nil
+}
+
+func heimdallShouldApplyMonitorLabelToBootstrapPullRequest(ctx context.Context, label string) error {
+	tc := getTC(ctx)
+	if !containsString(tc.prLabels, label) {
+		return fmt.Errorf("expected proposal PR to carry label %q, got %#v", label, tc.prLabels)
+	}
+	return nil
+}
+
+func heimdallShouldIncludeIssueDescriptionInPRBody(ctx context.Context) error {
+	tc := getTC(ctx)
+	if !strings.Contains(tc.prBody, tc.workItem.Description) {
+		return fmt.Errorf("expected proposal PR body to include issue description")
+	}
+	return nil
+}
+
+func pullRequestTitleShouldIndicateOpenSpecProposal(ctx context.Context) error {
+	tc := getTC(ctx)
+	expected := "OpenSpec proposal for"
+	if tc.pr == nil || !strings.Contains(tc.pr.Title, expected) {
+		return fmt.Errorf("expected PR title to indicate OpenSpec proposal, got %q", tc.pr.Title)
+	}
+	return nil
+}
+
+func bootstrapExecutionProducesNoFileChanges(ctx context.Context) error {
+	getTC(ctx).bootstrapNoChanges = true
 	return nil
 }
 

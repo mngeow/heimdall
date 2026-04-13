@@ -6,7 +6,7 @@
 Heimdall MUST use a GitHub App for GitHub API and git push operations and MUST rely on short-lived installation tokens for repository mutations.
 
 #### Scenario: Heimdall needs to push a bootstrap branch
-- **WHEN** Heimdall needs to push an activation-triggered bootstrap branch to GitHub
+- **WHEN** Heimdall needs to push an activation-triggered OpenSpec proposal branch to GitHub
 - **THEN** it mints a short-lived installation token from its GitHub App configuration
 - **AND** it uses that token for the branch push instead of a long-lived personal access token
 
@@ -29,12 +29,13 @@ Heimdall MUST poll GitHub for new pull request comments and relevant pull reques
 - **AND** the reconciliation path does not depend on inbound webhook delivery
 
 ### Requirement: GitHub repository operations support the automation lifecycle
-The GitHub SCM service MUST create or reuse branches, open or reuse pull requests, and publish pull request comments for Heimdall workflows.
+The GitHub SCM service MUST create or reuse branches, open or reuse pull requests, apply the configured PR monitor label when present, and publish pull request comments for Heimdall workflows.
 
-#### Scenario: Heimdall publishes a bootstrap pull request
-- **WHEN** an activation-triggered bootstrap workflow succeeds for a mapped repository
-- **THEN** the GitHub SCM service ensures the bootstrap branch exists in the repository
-- **AND** it opens or reuses a pull request against the configured base branch with the bootstrap title and description derived from the source issue
+#### Scenario: Heimdall publishes an activation proposal pull request
+- **WHEN** an activation-triggered OpenSpec proposal workflow succeeds for a mapped repository
+- **THEN** the GitHub SCM service ensures the proposal branch exists in the repository
+- **AND** it opens or reuses a pull request against the configured base branch with the proposal title and description derived from the source issue and generated change
+- **AND** it applies the configured PR monitor label when the repository declares one
 
 ### Requirement: Configured monitor labels are reconciled onto Heimdall pull requests
 When a managed repository configures a GitHub PR monitor label, Heimdall MUST ensure that repository label exists and MUST add it to Heimdall-created or adopted pull requests without removing unrelated labels.

@@ -8,6 +8,7 @@ The activation flow still opens a temporary bootstrap PR instead of creating the
 - **BREAKING** Require a per-repository default spec-writing agent setting so operators can choose which OpenCode agent generates activation proposals and refine edits.
 - Require the activation flow to commit and push the generated OpenSpec artifacts, then open or reuse a proposal PR whose title reflects the issue and whose configured GitHub monitor label is applied during reconciliation.
 - Preserve the existing idempotent activation behavior so retries reuse the same branch, worktree, change, and PR instead of duplicating proposal work.
+- Require retry-safe git worktree reconciliation so stale registered worktrees and partially failed earlier runs do not force manual operator cleanup before activation can succeed again.
 
 ## Capabilities
 

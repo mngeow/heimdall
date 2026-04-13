@@ -51,3 +51,15 @@ Feature: Runtime configuration
       And the environment overrides "HEIMDALL_REPO_PLATFORM_PR_MONITOR_LABEL" with "   "
       When Heimdall loads configuration from that project root
       Then configuration loading should fail with "HEIMDALL_REPO_PLATFORM_PR_MONITOR_LABEL"
+
+    Scenario: Default spec-writing agent is required for each repository
+      Given a project root with a valid Heimdall .env file
+      And the environment overrides "HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT" with ""
+      When Heimdall loads configuration from that project root
+      Then configuration loading should fail with "HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT"
+
+    Scenario: Empty default spec-writing agent is rejected
+      Given a project root with a valid Heimdall .env file
+      And the environment overrides "HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT" with "   "
+      When Heimdall loads configuration from that project root
+      Then configuration loading should fail with "HEIMDALL_REPO_PLATFORM_DEFAULT_SPEC_WRITING_AGENT"

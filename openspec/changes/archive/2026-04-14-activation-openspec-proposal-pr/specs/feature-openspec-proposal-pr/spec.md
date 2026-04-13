@@ -60,6 +60,15 @@ Heimdall MUST commit the activation-triggered OpenSpec proposal artifacts to the
 - **THEN** it commits and pushes the proposal branch
 - **AND** it opens or reuses a pull request targeting the configured base branch
 
+### Requirement: Activation proposal retries recover incomplete deterministic workspaces
+Heimdall MUST treat the deterministic activation proposal branch and worktree as recoverable workflow state even when a prior activation run failed before the proposal binding became active.
+
+#### Scenario: A retry continues from a partially prepared proposal workspace
+- **WHEN** a previous activation attempt already created or registered the deterministic proposal branch or worktree for a work item
+- **AND** that earlier attempt failed before the proposal branch was committed, pushed, or bound as active
+- **THEN** Heimdall reuses or repairs that deterministic workspace on retry instead of treating it as a brand-new branch/worktree request
+- **AND** later proposal commit, push, and pull request steps still target the same deterministic proposal branch identity
+
 ### Requirement: Activation proposal pull requests preserve source issue context
 Heimdall MUST publish a pull request title and description that reflect the source issue and the generated OpenSpec change.
 

@@ -55,66 +55,60 @@ func (r *Router) Resolve(teamKey string) *RouteResult {
 	}
 }
 
-// GenerateBranchName creates a deterministic branch name.
-func GenerateBranchName(branchPrefix, issueKey, slug string) string {
+// GenerateBranchName creates a deterministic branch name from the issue key and title.
+func GenerateBranchName(branchPrefix, issueKey, title string) string {
 	prefix := strings.Trim(strings.TrimSpace(branchPrefix), "/")
 	if prefix == "" {
 		prefix = "heimdall"
 	}
+	slug := CleanSlug(title)
+	if slug == "" {
+		slug = CleanSlug(issueKey)
+	}
 	return fmt.Sprintf("%s/%s-%s", prefix, issueKey, slug)
 }
 
-// GenerateChangeName creates a deterministic OpenSpec change name
-func GenerateChangeName(issueKey, slug string) string {
-	return fmt.Sprintf("%s-%s", issueKey, slug)
-}
-
-// Slugify creates a URL-safe slug from free-form text.
-func Slugify(text string) string {
+// CleanSlug creates a filesystem-safe, URL-safe slug from free-form text.
+// It strips characters that cause issues in branch names and folder paths
+// (commas, colons, non-ASCII/non-UTF-8 safe characters, etc.).
+func CleanSlug(text string) string {
 	var result strings.Builder
 	lastDash := false
 
 	for _, r := range strings.ToLower(text) {
+		// Keep only ASCII alphanumerics
 		isAlphaNum := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
 		if isAlphaNum {
 			result.WriteRune(r)
 			lastDash = false
 			continue
 		}
+		// Any other character becomes a single dash boundary
 		if !lastDash && result.Len() > 0 {
 			result.WriteRune('-')
 			lastDash = true
 		}
 	}
 
-	slug := strings.Trim(result.String(), "-")
-	return slug
-}
-
-// SlugFromDescriptionOrTitle returns a description-first slug with title fallback.
-func SlugFromDescriptionOrTitle(description, title string) string {
-	if slug := Slugify(description); slug != "" {
-		return slug
-	}
-	return Slugify(title)
+	return strings.Trim(result.String(), "-")
 }
 
 // GenerateWorktreePath creates a deterministic worktree path next to the configured mirror.
 func GenerateWorktreePath(localMirrorPath, branchName string) string {
 	mirrorDir := filepath.Dir(localMirrorPath)
 	mirrorBase := strings.TrimSuffix(filepath.Base(localMirrorPath), filepath.Ext(localMirrorPath))
+	// The branchName is already cleaned, but keep the replacement as a safety net.
 	branchComponent := strings.NewReplacer("/", "-", "\\", "-", ":", "-").Replace(branchName)
 	return filepath.Join(mirrorDir, mirrorBase+"-worktrees", branchComponent)
 }
 
-// CreateBootstrapWorkflowRun creates a bootstrap workflow run for an activated work item.
-func CreateBootstrapWorkflowRun(ctx context.Context, s *store.Store, workItemID int64, repository *store.Repository, changeName, branchName string) (*store.WorkflowRun, error) {
+// CreateProposalWorkflowRun creates a proposal workflow run for an activated work item.
+func CreateProposalWorkflowRun(ctx context.Context, s *store.Store, workItemID int64, repository *store.Repository, branchName string) (*store.WorkflowRun, error) {
 	run := &store.WorkflowRun{
 		WorkItemID:      workItemID,
 		RepositoryID:    repository.ID,
-		RunType:         "bootstrap_pull_request",
+		RunType:         "activation_proposal_pull_request",
 		Status:          "queued",
-		ChangeName:      changeName,
 		BranchName:      branchName,
 		WorktreePath:    GenerateWorktreePath(repository.LocalMirrorPath, branchName),
 		RequestedByType: "system",

@@ -60,12 +60,18 @@ The execution runtime MUST record the command, executor, and version details nee
 ## ADDED Requirements
 
 ### Requirement: Activation proposal runs from a worktree created off the configured mirror
-Heimdall MUST create the activation proposal worktree from the repository mirror configured by the resolved repository's local mirror path before invoking OpenSpec and OpenCode.
+Heimdall MUST create the activation proposal worktree from the repository mirror configured by the resolved repository's local mirror path before invoking OpenSpec and OpenCode, and it MUST reconcile stale git worktree registrations that would otherwise block deterministic retry paths.
 
 #### Scenario: Proposal worktree is created
 - **WHEN** an activated work item starts the proposal pull request workflow for the resolved repository
 - **THEN** Heimdall uses that repository's configured local mirror path as the git source for the new worktree
 - **AND** it runs the proposal execution inside that worktree rather than the bare mirror itself
+
+#### Scenario: Git still tracks a stale worktree registration from a prior failed run
+- **WHEN** Heimdall prepares the deterministic proposal worktree path and branch for an activation retry
+- **AND** git still reports that branch or worktree path as registered even though the prior worktree location is missing or otherwise prunable
+- **THEN** Heimdall prunes or removes the stale git worktree registration before retrying worktree creation
+- **AND** it does not require manual operator cleanup just to recreate the deterministic proposal worktree
 
 ### Requirement: Activation proposal generation fails visibly when no commit-ready artifacts are produced
 Heimdall MUST fail the activation proposal workflow when the proposal-generation execution completes without producing repository changes for the target OpenSpec change that can be committed.

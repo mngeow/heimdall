@@ -108,7 +108,7 @@ V1 should wrap the local CLIs rather than embedding provider-specific logic dire
 Two small adapters are enough:
 
 - `OpenSpecClient` for change creation, status inspection, instructions, and archive actions
-- `OpenCodeExecutor` for agent-driven refinement and apply operations
+- `OpenCodeClient` for agent-driven proposal generation, refinement, and apply operations
 
 Important rule: Heimdall should trust CLI JSON output for workflow state instead of inferring artifact layout on its own.
 
