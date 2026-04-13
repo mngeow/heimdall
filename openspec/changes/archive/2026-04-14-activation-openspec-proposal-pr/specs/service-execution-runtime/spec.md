@@ -1,6 +1,4 @@
-# Service: Execution Runtime
-
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: OpenSpec and OpenCode execution runs locally on the host
 Heimdall MUST run activation-triggered OpenSpec proposal generation through the local `openspec` and `opencode` CLIs on the Linux host where Heimdall is running, and it MUST verify that required local executables such as `git`, `openspec`, and `opencode` are available before the service reports readiness.
@@ -48,6 +46,18 @@ The execution runtime MUST record the command, executor, and version details nee
 - **WHEN** Heimdall executes a workflow step through `openspec`, `opencode`, `git`, or GitHub API-backed repository mutation logic
 - **THEN** it records the step outcome and the executor details needed for audit and recovery
 - **AND** those records are linked to the workflow run they belong to
+
+## REMOVED Requirements
+
+### Requirement: Activation bootstrap runs from a worktree created off the configured mirror
+**Reason**: Activation now generates OpenSpec proposal artifacts rather than a temporary bootstrap mutation.
+**Migration**: Use `Activation proposal runs from a worktree created off the configured mirror`.
+
+### Requirement: Empty bootstrap executions fail visibly
+**Reason**: Failure handling now applies to activation proposal generation instead of bootstrap file creation.
+**Migration**: Use `Activation proposal generation fails visibly when no commit-ready artifacts are produced`.
+
+## ADDED Requirements
 
 ### Requirement: Activation proposal runs from a worktree created off the configured mirror
 Heimdall MUST create the activation proposal worktree from the repository mirror configured by the resolved repository's local mirror path before invoking OpenSpec and OpenCode, and it MUST reconcile stale git worktree registrations that would otherwise block deterministic retry paths.

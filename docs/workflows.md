@@ -18,7 +18,7 @@ Suggested normalized active trigger name:
 
 That avoids hard-coding `In Progress` deep in the core workflow engine and keeps room for Jira later.
 
-### Bootstrap PR Flow
+### Activation Proposal PR Flow
 
 ```mermaid
 flowchart LR
@@ -27,8 +27,10 @@ flowchart LR
     Run --> Repo["Repository resolved"]
     Repo --> Mirror["Repo mirror synced"]
     Mirror --> Worktree["Branch worktree created"]
-    Worktree --> Bootstrap["Bootstrap file change generated"]
-    Bootstrap --> Check["No-change check"]
+    Worktree --> Change["OpenSpec change created or reused"]
+    Change --> Status["OpenSpec status and instructions read"]
+    Status --> Proposal["Proposal artifacts generated via opencode"]
+    Proposal --> Check["No-change check"]
     Check --> Commit["Commit and push"]
     Commit --> PR["Pull request opened or reused"]
 ```
@@ -36,23 +38,27 @@ flowchart LR
 Detailed flow:
 
 1. Resolve the target repository.
-2. Reconcile whether a branch or PR already exists for this issue.
+2. Reconcile whether a branch, change, or PR already exists for this issue.
 3. Create or reuse branch `heimdall/<issue-key>-<description-or-title-slug>`.
-4. Ensure the configured bare mirror exists at `HEIMDALL_REPO_<id>_LOCAL_MIRROR_PATH`.
-5. Create a worktree from that mirror for the bootstrap branch.
-6. Run local `opencode` with the fixed activation bootstrap profile of the `general` agent and model `gpt-5.4`.
-7. Ask OpenCode to create or update `.heimdall/bootstrap/<issue-key>.md` as the intentionally small bootstrap file change.
-8. Fail the workflow as blocked if the bootstrap run leaves no repository changes.
-9. Commit the bootstrap file change.
-10. Push the branch by using a GitHub App installation token.
-11. Open or reuse a PR against `main` with the source issue context in the title and body.
-12. Emit structured logs for each major workflow step so operators can follow progress and diagnose failures from the host journal.
+4. Derive deterministic change name `<issue-key>-<description-or-title-slug>` (lowercased).
+5. Ensure the configured bare mirror exists at `HEIMDALL_REPO_<id>_LOCAL_MIRROR_PATH`.
+6. Create a worktree from that mirror for the proposal branch.
+7. Create or reuse the OpenSpec change through the local `openspec` CLI.
+8. Read OpenSpec CLI status and artifact instructions to determine which artifacts are required.
+9. Run local `opencode` with the repository's configured default spec-writing agent, using the Linear issue title and description as prompt context.
+10. Repeat artifact generation until the apply-required artifacts are complete.
+11. Fail the workflow as blocked if the proposal run leaves no repository changes.
+12. Commit the generated OpenSpec artifacts.
+13. Push the branch by using a GitHub App installation token.
+14. Open or reuse a proposal PR against `main` with the source issue context and generated change name in the title and body.
+15. Apply the configured PR monitor label when present.
+16. Emit structured logs for each major workflow step so operators can follow progress and diagnose failures from the host journal.
 
 ## Workflow 2: Refine Specs From A PR Comment
 
 Refinement is an artifact-only operation. It should update OpenSpec files but not apply implementation tasks.
 
-In V1, refinement should use the repository's configured default spec-writing agent so the user does not need to supply an agent name for every artifact edit.
+In V1, both activation-triggered proposal generation and `/heimdall refine` use the repository's configured default spec-writing agent so the user does not need to supply an agent name for every artifact edit.
 
 Recommended command:
 
@@ -158,6 +164,7 @@ Recommended idempotency keys:
 
 - `linear:<issue-id>:entered_active_state:<timestamp-or-version>`
 - `repo:<repo>:issue:<issue-key>:branch`
+- `repo:<repo>:issue:<issue-key>:change`
 - `repo:<repo>:issue:<issue-key>:pr`
 - `github-comment:<comment-node-id>`
 

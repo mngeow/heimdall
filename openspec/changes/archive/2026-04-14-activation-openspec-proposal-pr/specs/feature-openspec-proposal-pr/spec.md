@@ -1,6 +1,22 @@
-# Feature: OpenSpec Proposal Pull Request
+## REMOVED Requirements
 
-## ADDED Requirements
+### Requirement: Activation bootstrap is seeded from work item content
+**Reason**: Activation now seeds durable OpenSpec proposal generation instead of a temporary bootstrap file mutation.
+**Migration**: Use `Activation proposal is seeded from work item content`.
+
+### Requirement: Initial activation bootstrap does not require OpenSpec change creation
+**Reason**: Activation now creates or reuses a real OpenSpec change before proposal artifacts are generated.
+**Migration**: Use `Activation proposal creates or reuses an OpenSpec change before artifact generation`.
+
+### Requirement: Bootstrap changes are committed, pushed, and opened as a pull request
+**Reason**: Activation now commits generated OpenSpec proposal artifacts instead of bootstrap-only repository changes.
+**Migration**: Use `Activation proposal artifacts are committed, pushed, and opened as a pull request`.
+
+### Requirement: Bootstrap pull requests preserve source issue context
+**Reason**: Activation now publishes proposal-focused pull requests rather than bootstrap pull requests.
+**Migration**: Use `Activation proposal pull requests preserve source issue context`.
+
+## MODIFIED Requirements
 
 ### Requirement: Branches are deterministic
 Heimdall MUST use deterministic branch naming for activation-triggered OpenSpec proposal generation so retries reconcile existing work instead of creating duplicate work branches.
@@ -9,6 +25,8 @@ Heimdall MUST use deterministic branch naming for activation-triggered OpenSpec 
 - **WHEN** Heimdall prepares a proposal branch for work item `ENG-123` whose description yields slug `add-rate-limiting`
 - **THEN** it names the branch `heimdall/ENG-123-add-rate-limiting`
 - **AND** it reuses that same branch identity on later retries for the same work item and repository
+
+## ADDED Requirements
 
 ### Requirement: Activation proposal is seeded from work item content
 Heimdall MUST extract the activated work item's title and description and MUST use that content as the seed for activation-triggered OpenSpec proposal generation.

@@ -2,12 +2,13 @@
 
 Heimdall is a Linux-hosted Go service that turns kanban movement into OpenSpec-driven engineering work.
 
-In the initial design, Heimdall:
+In the current design, Heimdall:
 - polls Linear for issues entering an active state
 - creates a git branch for the target repository
-- generates an OpenSpec change from the issue title and description
+- creates or reuses an OpenSpec change from the issue title and description
+- runs the repository's configured default spec-writing agent through local `opencode` to generate proposal artifacts
 - commits and pushes the generated spec artifacts
-- opens a GitHub pull request to `main`
+- opens a GitHub proposal pull request to `main`
 - polls GitHub for new PR comments on Heimdall-managed pull requests so it can refine specs or run `/opsx-apply` with an allowed agent
 - commits any resulting changes back to the same branch
 

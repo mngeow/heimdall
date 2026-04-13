@@ -20,9 +20,9 @@ The happy path for V1 is intentionally small:
 1. A Linear issue is moved into the configured active state.
 2. Heimdall detects that transition during polling.
 3. Heimdall creates a branch in the configured GitHub repository.
-4. Heimdall creates a small bootstrap file change from the Linear issue title and description.
-5. Heimdall commits that bootstrap change and opens a pull request against `main`.
-6. The bootstrap PR proves the activation-to-PR path before Heimdall later swaps that temporary file change for OpenSpec proposal generation.
+4. Heimdall creates or reuses an OpenSpec change from the Linear issue title and description.
+5. Heimdall runs the repository's configured default spec-writing agent through local `opencode` to generate the proposal artifacts required by the change's OpenSpec schema.
+6. Heimdall commits the generated OpenSpec artifacts and opens a proposal pull request against `main`.
 7. The engineer refines the spec from GitHub comments, which Heimdall discovers during polling.
 8. When ready, the engineer triggers `/opsx-apply` from the PR with an allowed agent.
 9. Heimdall commits the resulting changes back to the same branch.
@@ -64,16 +64,16 @@ To keep V1 easy to operate and easy to adopt, the design makes these choices:
 These defaults keep the product predictable and easy to reason about:
 
 - Branch name: `heimdall/<issue-key>-<description-or-title-slug>`
-- Bootstrap file: `.heimdall/bootstrap/<issue-key>.md`
-- PR title: `[<issue-key>] Bootstrap PR for <issue title>`
-- Initial bootstrap commit message: `docs: bootstrap <issue-key> via heimdall`
-- No-change bootstrap result: fail the workflow as blocked and log the reason instead of opening an empty PR
+- OpenSpec change name: `<issue-key>-<description-or-title-slug>` (lowercased)
+- PR title: `[<issue-key>] OpenSpec proposal for <issue title>`
+- Initial proposal commit message: `docs(openspec): propose <change-name> via heimdall`
+- No-change proposal result: fail the workflow as blocked and log the reason instead of opening an empty PR
 - Refinement commit message: `docs(openspec): refine <change-name>`
 - Apply commit message: `feat: implement <change-name> via heimdall`
 
-## Activation Bootstrap Logging
+## Activation Proposal Logging
 
-The activation bootstrap path should be easy to follow from host logs alone.
+The activation proposal path should be easy to follow from host logs alone.
 
 Operators should expect structured log entries that include:
 
@@ -82,10 +82,11 @@ Operators should expect structured log entries that include:
 - repository ref
 - branch name when known
 - worktree path when known
+- change name when known
 - workflow step name and outcome
-- blocked or failure reason when the bootstrap flow cannot continue
+- blocked or failure reason when the proposal flow cannot continue
 
-Logs must stay redacted enough to avoid exposing installation tokens or raw bootstrap prompt bodies.
+Logs must stay redacted enough to avoid exposing installation tokens, raw prompt bodies, or secrets.
 
 ## Routing Model
 

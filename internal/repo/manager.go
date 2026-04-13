@@ -50,17 +50,18 @@ func (m *Manager) EnsureBareMirror(ctx context.Context, mirrorPath, owner, name,
 }
 
 // CreateWorktree creates a new worktree for a workflow run.
+// It reconciles stale git worktree registrations that may exist from prior failed runs.
 func (m *Manager) CreateWorktree(ctx context.Context, mirrorPath, baseBranch, branchName, worktreePath string) error {
 	// Ensure worktree directory exists
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0755); err != nil {
 		return fmt.Errorf("failed to create worktree directory: %w", err)
 	}
 
-	// Check if worktree already exists
-	if _, err := os.Stat(worktreePath); err == nil {
-		// Remove existing worktree
-		cmd := exec.CommandContext(ctx, "git", "-C", mirrorPath, "worktree", "remove", "-f", worktreePath)
-		cmd.CombinedOutput() // Ignore errors
+	// Reconcile stale git worktree registrations before attempting creation.
+	// A prior failed run may have registered the branch/worktree in git metadata
+	// even if the worktree directory no longer exists.
+	if err := m.reconcileStaleWorktree(ctx, mirrorPath, branchName, worktreePath); err != nil {
+		return fmt.Errorf("failed to reconcile stale worktree: %w", err)
 	}
 
 	// Create worktree
@@ -71,6 +72,77 @@ func (m *Manager) CreateWorktree(ctx context.Context, mirrorPath, baseBranch, br
 	}
 
 	return nil
+}
+
+// reconcileStaleWorktree removes stale git worktree registrations that would
+// block creation of a new worktree at the same path or branch.
+func (m *Manager) reconcileStaleWorktree(ctx context.Context, mirrorPath, branchName, worktreePath string) error {
+	// List existing worktrees to check for stale registrations
+	cmd := exec.CommandContext(ctx, "git", "-C", mirrorPath, "worktree", "list", "--porcelain")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// If we can't list worktrees, proceed anyway and let the creation fail
+		// with a more specific error if there's actually a conflict
+		return nil
+	}
+
+	// Parse worktree list to find conflicts
+	worktrees := parseWorktreeList(string(output))
+	fullBranchRef := "refs/heads/" + branchName
+
+	for _, wt := range worktrees {
+		// Check if this worktree uses the same branch or path
+		if wt.branch == fullBranchRef || wt.path == worktreePath {
+			// Remove the stale worktree registration
+			// Use -f to force removal even if the worktree directory is missing
+			removeCmd := exec.CommandContext(ctx, "git", "-C", mirrorPath, "worktree", "remove", "-f", wt.path)
+			removeCmd.CombinedOutput() // Ignore errors - worktree may already be partially removed
+		}
+	}
+
+	// Also prune any worktrees that git considers prunable
+	pruneCmd := exec.CommandContext(ctx, "git", "-C", mirrorPath, "worktree", "prune")
+	pruneCmd.CombinedOutput() // Ignore errors - prune is best-effort
+
+	return nil
+}
+
+// worktreeInfo represents a parsed git worktree entry
+type worktreeInfo struct {
+	path   string
+	branch string
+}
+
+// parseWorktreeList parses the output of `git worktree list --porcelain`
+func parseWorktreeList(output string) []worktreeInfo {
+	var worktrees []worktreeInfo
+	var current worktreeInfo
+
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			// Empty line indicates end of worktree entry
+			if current.path != "" {
+				worktrees = append(worktrees, current)
+				current = worktreeInfo{}
+			}
+			continue
+		}
+
+		if strings.HasPrefix(line, "worktree ") {
+			current.path = strings.TrimPrefix(line, "worktree ")
+		} else if strings.HasPrefix(line, "branch ") {
+			current.branch = strings.TrimPrefix(line, "branch ")
+		}
+		// Other fields (HEAD, detached, prunable) are ignored for our purposes
+	}
+
+	// Don't forget the last entry if file doesn't end with newline
+	if current.path != "" {
+		worktrees = append(worktrees, current)
+	}
+
+	return worktrees
 }
 
 // HasChanges reports whether the worktree contains repository changes.

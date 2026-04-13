@@ -25,7 +25,7 @@ func (s *stubActivationFlow) Execute(_ context.Context, runID int64) error {
 	return s.err
 }
 
-func TestPollLinearOnceCreatesBootstrapWorkflowRun(t *testing.T) {
+func TestPollLinearOnceCreatesProposalWorkflowRun(t *testing.T) {
 	ctx := context.Background()
 	runtimeStore, err := store.New(":memory:")
 	if err != nil {
@@ -44,12 +44,13 @@ func TestPollLinearOnceCreatesBootstrapWorkflowRun(t *testing.T) {
 			APIToken:     "linear-token",
 		},
 		Repos: []config.RepoConfig{{
-			Name:            "github.com/acme/platform",
-			LocalMirrorPath: "/var/lib/heimdall/repos/github.com/acme/platform.git",
-			AllowedAgents:   []string{"gpt-5.4"},
-			AllowedUsers:    []string{"mngeow"},
-			DefaultBranch:   "main",
-			BranchPrefix:    "heimdall",
+			Name:                    "github.com/acme/platform",
+			LocalMirrorPath:         "/var/lib/heimdall/repos/github.com/acme/platform.git",
+			AllowedAgents:           []string{"gpt-5.4"},
+			AllowedUsers:            []string{"mngeow"},
+			DefaultSpecWritingAgent: "gpt-5.4",
+			DefaultBranch:           "main",
+			BranchPrefix:            "heimdall",
 		}},
 	}
 	if err := syncConfiguredRepositories(ctx, runtimeStore, cfg.Repos); err != nil {
@@ -97,10 +98,10 @@ func TestPollLinearOnceCreatesBootstrapWorkflowRun(t *testing.T) {
 	if run == nil {
 		t.Fatal("expected workflow run to be created")
 	}
-	if run.RunType != "bootstrap_pull_request" {
-		t.Fatalf("expected bootstrap run type, got %q", run.RunType)
+	if run.RunType != "activation_proposal_pull_request" {
+		t.Fatalf("expected proposal run type, got %q", run.RunType)
 	}
-	if run.BranchName != "heimdall/ENG-123-more-details" {
-		t.Fatalf("expected description-seeded branch, got %q", run.BranchName)
+	if run.BranchName != "heimdall/ENG-123-add-rate-limiting" {
+		t.Fatalf("expected title-seeded branch, got %q", run.BranchName)
 	}
 }

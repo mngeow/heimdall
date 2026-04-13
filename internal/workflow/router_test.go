@@ -6,7 +6,7 @@ import (
 	"github.com/mngeow/heimdall/internal/config"
 )
 
-func TestSlugify(t *testing.T) {
+func TestCleanSlug(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected string
@@ -17,67 +17,34 @@ func TestSlugify(t *testing.T) {
 		{"Test123", "test123"},
 		{"Add   rate limiting!!!", "add-rate-limiting"},
 		{"###", ""},
+		{"Feature: add rate limiting, please", "feature-add-rate-limiting-please"},
+		{"Add rate limiting (API)", "add-rate-limiting-api"},
+		{"Café update", "caf-update"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := Slugify(tt.input)
+			result := CleanSlug(tt.input)
 			if result != tt.expected {
-				t.Errorf("Slugify(%q) = %q, want %q", tt.input, result, tt.expected)
+				t.Errorf("CleanSlug(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
 }
 
 func TestGenerateBranchName(t *testing.T) {
-	result := GenerateBranchName("heimdall", "ENG-123", "add-rate-limiting")
+	result := GenerateBranchName("heimdall", "ENG-123", "Add rate limiting")
 	expected := "heimdall/ENG-123-add-rate-limiting"
 	if result != expected {
 		t.Errorf("GenerateBranchName() = %q, want %q", result, expected)
 	}
 }
 
-func TestSlugFromDescriptionOrTitle(t *testing.T) {
-	tests := []struct {
-		name        string
-		description string
-		title       string
-		want        string
-	}{
-		{
-			name:        "description wins when usable",
-			description: "Add rate limiting for API requests",
-			title:       "Add rate limiting",
-			want:        "add-rate-limiting-for-api-requests",
-		},
-		{
-			name:        "title fallback when description empty",
-			description: "",
-			title:       "Add rate limiting",
-			want:        "add-rate-limiting",
-		},
-		{
-			name:        "title fallback when description unusable",
-			description: "###",
-			title:       "Add rate limiting",
-			want:        "add-rate-limiting",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := SlugFromDescriptionOrTitle(tt.description, tt.title); got != tt.want {
-				t.Fatalf("SlugFromDescriptionOrTitle() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGenerateChangeName(t *testing.T) {
-	result := GenerateChangeName("ENG-123", "add-rate-limiting")
-	expected := "ENG-123-add-rate-limiting"
+func TestGenerateBranchNameWithSpecialChars(t *testing.T) {
+	result := GenerateBranchName("heimdall", "ENG-123", "Feature: add rate limiting, please")
+	expected := "heimdall/ENG-123-feature-add-rate-limiting-please"
 	if result != expected {
-		t.Errorf("GenerateChangeName() = %q, want %q", result, expected)
+		t.Errorf("GenerateBranchName() = %q, want %q", result, expected)
 	}
 }
 

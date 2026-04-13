@@ -60,15 +60,16 @@ type GitHubConfig struct {
 
 // RepoConfig represents a managed repository.
 type RepoConfig struct {
-	ID              string
-	Name            string   `env:"NAME,required,notEmpty"`
-	LocalMirrorPath string   `env:"LOCAL_MIRROR_PATH,required,notEmpty"`
-	DefaultBranch   string   `env:"DEFAULT_BRANCH" envDefault:"main"`
-	BranchPrefix    string   `env:"BRANCH_PREFIX" envDefault:"heimdall"`
-	PRMonitorLabel  string   `env:"PR_MONITOR_LABEL"`
-	LinearTeamKeys  []string `env:"LINEAR_TEAM_KEYS" envSeparator:","`
-	AllowedAgents   []string `env:"ALLOWED_AGENTS,required" envSeparator:","`
-	AllowedUsers    []string `env:"ALLOWED_USERS,required" envSeparator:","`
+	ID                      string
+	Name                    string   `env:"NAME,required,notEmpty"`
+	LocalMirrorPath         string   `env:"LOCAL_MIRROR_PATH,required,notEmpty"`
+	DefaultBranch           string   `env:"DEFAULT_BRANCH" envDefault:"main"`
+	BranchPrefix            string   `env:"BRANCH_PREFIX" envDefault:"heimdall"`
+	PRMonitorLabel          string   `env:"PR_MONITOR_LABEL"`
+	LinearTeamKeys          []string `env:"LINEAR_TEAM_KEYS" envSeparator:","`
+	AllowedAgents           []string `env:"ALLOWED_AGENTS,required" envSeparator:","`
+	AllowedUsers            []string `env:"ALLOWED_USERS,required" envSeparator:","`
+	DefaultSpecWritingAgent string   `env:"DEFAULT_SPEC_WRITING_AGENT,required,notEmpty"`
 }
 
 type rootEnvConfig struct {
@@ -182,6 +183,9 @@ func (c *Config) Validate() error {
 		if len(repo.AllowedAgents) == 0 {
 			return fmt.Errorf("HEIMDALL_REPO_%s_ALLOWED_AGENTS must include at least one agent", repo.ID)
 		}
+		if repo.DefaultSpecWritingAgent == "" {
+			return fmt.Errorf("HEIMDALL_REPO_%s_DEFAULT_SPEC_WRITING_AGENT must not be empty", repo.ID)
+		}
 		if existingRepoID, exists := repoRefs[repo.Name]; exists {
 			return fmt.Errorf("repository %q is defined more than once by HEIMDALL_REPO_%s_NAME and HEIMDALL_REPO_%s_NAME", repo.Name, existingRepoID, repo.ID)
 		}
@@ -268,6 +272,7 @@ func loadRepoConfig(environment map[string]string, repoID string) (RepoConfig, e
 	repoConfig.LinearTeamKeys = trimNonEmpty(repoConfig.LinearTeamKeys)
 	repoConfig.AllowedAgents = trimNonEmpty(repoConfig.AllowedAgents)
 	repoConfig.AllowedUsers = trimNonEmpty(repoConfig.AllowedUsers)
+	repoConfig.DefaultSpecWritingAgent = strings.TrimSpace(repoConfig.DefaultSpecWritingAgent)
 
 	return repoConfig, nil
 }

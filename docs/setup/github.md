@@ -282,6 +282,7 @@ For each managed repository, verify:
 - `HEIMDALL_REPO_<ID>_PR_MONITOR_LABEL` is set if you want label-scoped PR monitoring for that repository
 - `HEIMDALL_REPO_<ID>_ALLOWED_USERS` contains the operators who may run commands
 - `HEIMDALL_REPO_<ID>_ALLOWED_AGENTS` contains the agent names permitted for `/opsx-apply`
+- `HEIMDALL_REPO_<ID>_DEFAULT_SPEC_WRITING_AGENT` sets the agent used for activation-triggered proposal generation and `/heimdall refine`
 - the GitHub polling interval and lookback semantics are configured for that deployment
 
 ## Easy-To-Miss GitHub Details

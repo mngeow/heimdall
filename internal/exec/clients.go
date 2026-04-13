@@ -72,7 +72,41 @@ func (c *OpenSpecClient) GetInstructions(ctx context.Context, changeName string)
 	return &instructions, nil
 }
 
-// Instructions represents OpenSpec instructions
+// GetApplyInstructions retrieves apply instructions for a change.
+func (c *OpenSpecClient) GetApplyInstructions(ctx context.Context, changeName string) (*ApplyInstructions, error) {
+	cmd := exec.CommandContext(ctx, "openspec", "instructions", "apply", "--change", changeName, "--json")
+	cmd.Dir = c.worktreePath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get apply instructions: %w (output: %s)", err, string(output))
+	}
+
+	var instructions ApplyInstructions
+	if err := json.Unmarshal(output, &instructions); err != nil {
+		return nil, fmt.Errorf("failed to parse apply instructions: %w", err)
+	}
+
+	return &instructions, nil
+}
+
+// ListChanges lists all OpenSpec changes in the worktree.
+func (c *OpenSpecClient) ListChanges(ctx context.Context) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "openspec", "list", "--json")
+	cmd.Dir = c.worktreePath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list changes: %w (output: %s)", err, string(output))
+	}
+
+	var changes []string
+	if err := json.Unmarshal(output, &changes); err != nil {
+		return nil, fmt.Errorf("failed to parse changes list: %w", err)
+	}
+
+	return changes, nil
+}
+
+// Instructions represents OpenSpec instructions for artifact generation.
 type Instructions struct {
 	ArtifactID   string   `json:"artifact_id"`
 	Type         string   `json:"type"`
@@ -80,49 +114,69 @@ type Instructions struct {
 	Dependencies []string `json:"dependencies"`
 }
 
-// BootstrapRequest describes the activation-seeded bootstrap change to generate.
-type BootstrapRequest struct {
+// ApplyInstructions represents OpenSpec apply instructions.
+type ApplyInstructions struct {
+	ChangeName   string            `json:"changeName"`
+	ChangeDir    string            `json:"changeDir"`
+	SchemaName   string            `json:"schemaName"`
+	ContextFiles map[string]string `json:"contextFiles"`
+	Progress     struct {
+		Total     int `json:"total"`
+		Complete  int `json:"complete"`
+		Remaining int `json:"remaining"`
+	} `json:"progress"`
+	Tasks []struct {
+		ID          string `json:"id"`
+		Description string `json:"description"`
+		Done        bool   `json:"done"`
+	} `json:"tasks"`
+	State       string `json:"state"`
+	Instruction string `json:"instruction"`
+}
+
+// ProposalRequest describes the activation-seeded OpenSpec proposal generation request.
+type ProposalRequest struct {
 	WorktreePath string
 	IssueKey     string
 	IssueTitle   string
 	Description  string
-	BranchName   string
+	Agent        string
 }
 
-// BootstrapResult describes the bootstrap change that was generated.
-type BootstrapResult struct {
-	Summary string
+// ProposalResult describes the proposal generation outcome.
+type ProposalResult struct {
+	Summary       string
+	ChangesBefore []string // List of changes before running opencode, used to discover newly created change
 }
 
-// BootstrapRunner runs the activation bootstrap prompt through opencode.
-type BootstrapRunner interface {
-	RunBootstrap(context.Context, BootstrapRequest) (*BootstrapResult, error)
+// ProposalRunner runs the activation proposal generation through opencode.
+type ProposalRunner interface {
+	RunProposal(context.Context, ProposalRequest) (*ProposalResult, error)
 }
 
-// OpenCodeBootstrapRunner executes activation bootstrap prompts through the local opencode CLI.
-type OpenCodeBootstrapRunner struct{}
+// OpenCodeProposalRunner executes activation proposal generation through the local opencode CLI.
+type OpenCodeProposalRunner struct{}
 
-// NewOpenCodeBootstrapRunner creates a runner for activation bootstrap prompts.
-func NewOpenCodeBootstrapRunner() *OpenCodeBootstrapRunner {
-	return &OpenCodeBootstrapRunner{}
+// NewOpenCodeProposalRunner creates a runner for activation proposal generation.
+func NewOpenCodeProposalRunner() *OpenCodeProposalRunner {
+	return &OpenCodeProposalRunner{}
 }
 
-// RunBootstrap executes the fixed activation bootstrap profile.
-func (r *OpenCodeBootstrapRunner) RunBootstrap(ctx context.Context, req BootstrapRequest) (*BootstrapResult, error) {
-	prompt := buildBootstrapPrompt(req)
+// RunProposal executes the activation proposal generation using the configured agent.
+func (r *OpenCodeProposalRunner) RunProposal(ctx context.Context, req ProposalRequest) (*ProposalResult, error) {
+	prompt := buildProposalPrompt(req)
 	cmd := exec.CommandContext(ctx,
 		"opencode", "run",
-		"--agent", "general",
-		"--model", "openai/gpt-5.4",
+		"--agent", req.Agent,
 		"--dir", req.WorktreePath,
 		prompt,
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("failed to run bootstrap prompt: %w (output: %s)", err, string(output))
+		return nil, fmt.Errorf("failed to run proposal prompt: %w (output: %s)", err, string(output))
 	}
 
-	return &BootstrapResult{Summary: bootstrapSummary(req)}, nil
+	return &ProposalResult{Summary: proposalSummary(req)}, nil
 }
 
 // OpenCodeClient wraps the opencode CLI
@@ -178,31 +232,27 @@ func (c *OpenCodeClient) GetVersion(ctx context.Context) (string, error) {
 	return string(output), nil
 }
 
-func buildBootstrapPrompt(req BootstrapRequest) string {
+func buildProposalPrompt(req ProposalRequest) string {
 	description := strings.TrimSpace(req.Description)
 	if description == "" {
 		description = "No issue description was provided."
 	}
 
-	return fmt.Sprintf(`You are creating Heimdall's temporary activation bootstrap change.
+	return fmt.Sprintf(`You are generating an OpenSpec change proposal for a Heimdall-activated work item.
 
 Work only inside this repository.
-Create or update the file .heimdall/bootstrap/%s.md.
-Keep the change intentionally small and focused.
-Do not create an OpenSpec change.
-
-The file must contain:
-- a level-1 heading with the issue key and title
-- a short note that this is a temporary bootstrap file change created from activation
-- the issue description in a short quoted block
+Use the local openspec CLI to create a new change with an appropriate name based on the issue context.
+Use openspec status and instructions to determine which artifacts are required.
+Generate all apply-required artifacts (proposal, design, specs, tasks) before stopping.
+Do not implement tasks; only create the proposal artifacts.
 
 Issue key: %s
 Issue title: %s
 Issue description:
 %s
-`, req.IssueKey, req.IssueKey, req.IssueTitle, description)
+`, req.IssueKey, req.IssueTitle, description)
 }
 
-func bootstrapSummary(req BootstrapRequest) string {
-	return fmt.Sprintf("Created or updated .heimdall/bootstrap/%s.md from the activation seed.", req.IssueKey)
+func proposalSummary(req ProposalRequest) string {
+	return fmt.Sprintf("Generated OpenSpec proposal artifacts for issue %s from the activation seed.", req.IssueKey)
 }

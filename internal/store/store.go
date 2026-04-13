@@ -207,6 +207,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`ALTER TABLE work_items ADD COLUMN labels_json TEXT NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE workflow_runs ADD COLUMN status_reason TEXT`,
 		`ALTER TABLE repositories ADD COLUMN pr_monitor_label TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE repositories ADD COLUMN default_spec_writing_agent TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, migration := range columnMigrations {
 		if err := s.execOptionalMigration(ctx, migration); err != nil {
