@@ -1,9 +1,11 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 )
@@ -16,6 +18,12 @@ type OpenSpecClient struct {
 // NewOpenSpecClient creates a new OpenSpec client
 func NewOpenSpecClient(worktreePath string) *OpenSpecClient {
 	return &OpenSpecClient{worktreePath: worktreePath}
+}
+
+// SetWorktreePath sets the worktree path for subsequent OpenSpec commands.
+// This allows the same client instance to be reused across different workflow runs.
+func (c *OpenSpecClient) SetWorktreePath(worktreePath string) {
+	c.worktreePath = worktreePath
 }
 
 // ChangeStatus represents the status of an OpenSpec change
@@ -38,13 +46,47 @@ func (c *OpenSpecClient) CreateChange(ctx context.Context, name string) error {
 	return nil
 }
 
+// getJSONOutput runs a command and returns the first JSON object found in stdout.
+// This handles CLI tools that emit human-readable progress lines before the JSON payload.
+func getJSONOutput(cmd *exec.Cmd) ([]byte, error) {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start command: %w", err)
+	}
+	output, err := io.ReadAll(stdout)
+	if waitErr := cmd.Wait(); waitErr != nil {
+		return nil, fmt.Errorf("command failed: %w", waitErr)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read stdout: %w", err)
+	}
+
+	// If the output is already valid JSON, return it directly.
+	if len(bytes.TrimSpace(output)) > 0 && (bytes.TrimSpace(output)[0] == '{' || bytes.TrimSpace(output)[0] == '[') {
+		return output, nil
+	}
+
+	// Otherwise, scan for the first JSON object or array in the output.
+	start := bytes.Index(output, []byte("{"))
+	if start == -1 {
+		start = bytes.Index(output, []byte("["))
+	}
+	if start == -1 {
+		return nil, fmt.Errorf("no JSON found in output")
+	}
+	return output[start:], nil
+}
+
 // GetStatus retrieves the status of a change
 func (c *OpenSpecClient) GetStatus(ctx context.Context, name string) (*ChangeStatus, error) {
 	cmd := exec.CommandContext(ctx, "openspec", "status", "--change", name, "--json")
 	cmd.Dir = c.worktreePath
-	output, err := cmd.CombinedOutput()
+	output, err := getJSONOutput(cmd)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get status: %w (output: %s)", err, string(output))
+		return nil, fmt.Errorf("failed to get status: %w", err)
 	}
 
 	var status ChangeStatus
@@ -59,9 +101,9 @@ func (c *OpenSpecClient) GetStatus(ctx context.Context, name string) (*ChangeSta
 func (c *OpenSpecClient) GetInstructions(ctx context.Context, changeName string) (*Instructions, error) {
 	cmd := exec.CommandContext(ctx, "openspec", "instructions", changeName, "--json")
 	cmd.Dir = c.worktreePath
-	output, err := cmd.CombinedOutput()
+	output, err := getJSONOutput(cmd)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get instructions: %w (output: %s)", err, string(output))
+		return nil, fmt.Errorf("failed to get instructions: %w", err)
 	}
 
 	var instructions Instructions
@@ -76,9 +118,9 @@ func (c *OpenSpecClient) GetInstructions(ctx context.Context, changeName string)
 func (c *OpenSpecClient) GetApplyInstructions(ctx context.Context, changeName string) (*ApplyInstructions, error) {
 	cmd := exec.CommandContext(ctx, "openspec", "instructions", "apply", "--change", changeName, "--json")
 	cmd.Dir = c.worktreePath
-	output, err := cmd.CombinedOutput()
+	output, err := getJSONOutput(cmd)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get apply instructions: %w (output: %s)", err, string(output))
+		return nil, fmt.Errorf("failed to get apply instructions: %w", err)
 	}
 
 	var instructions ApplyInstructions
@@ -87,6 +129,13 @@ func (c *OpenSpecClient) GetApplyInstructions(ctx context.Context, changeName st
 	}
 
 	return &instructions, nil
+}
+
+// listChangesResponse matches the real `openspec list --json` output shape.
+type listChangesResponse struct {
+	Changes []struct {
+		Name string `json:"name"`
+	} `json:"changes"`
 }
 
 // ListChanges lists all OpenSpec changes in the worktree.
@@ -98,12 +147,16 @@ func (c *OpenSpecClient) ListChanges(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to list changes: %w (output: %s)", err, string(output))
 	}
 
-	var changes []string
-	if err := json.Unmarshal(output, &changes); err != nil {
+	var resp listChangesResponse
+	if err := json.Unmarshal(output, &resp); err != nil {
 		return nil, fmt.Errorf("failed to parse changes list: %w", err)
 	}
 
-	return changes, nil
+	names := make([]string, 0, len(resp.Changes))
+	for _, ch := range resp.Changes {
+		names = append(names, ch.Name)
+	}
+	return names, nil
 }
 
 // Instructions represents OpenSpec instructions for artifact generation.

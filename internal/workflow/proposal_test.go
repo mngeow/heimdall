@@ -90,9 +90,14 @@ type fakeOpenSpecClient struct {
 	getStatusCalls            int
 	getApplyInstructionsCalls int
 	listChangesCalls          int
+	worktreePath              string
 	applyInstructions         *exec.ApplyInstructions
 	changesBefore             []string
 	changesAfter              []string
+}
+
+func (f *fakeOpenSpecClient) SetWorktreePath(worktreePath string) {
+	f.worktreePath = worktreePath
 }
 
 func (f *fakeOpenSpecClient) CreateChange(_ context.Context, _ string) error {
@@ -297,6 +302,68 @@ func TestProposalWorkflowExecuteReusesExistingBinding(t *testing.T) {
 	}
 	if repoMgr.steps != nil {
 		t.Fatalf("expected no repo manager steps when binding is reused, got %v", repoMgr.steps)
+	}
+}
+
+func TestProposalWorkflowSetsOpenSpecWorktreePath(t *testing.T) {
+	ctx := context.Background()
+	runtimeStore := testWorkflowStore(t)
+	workItem, repository, run := seedProposalRun(t, ctx, runtimeStore)
+
+	_ = workItem
+	_ = repository
+	repoMgr := &fakeProposalRepoManager{hasChanges: true, commitSHA: "abc123"}
+	githubClient := &fakeProposalGitHubClient{token: "installation-token", installationOK: true}
+	openSpecClient := &fakeOpenSpecClient{
+		applyInstructions: &exec.ApplyInstructions{State: "ready"},
+		changesBefore:     []string{},
+		changesAfter:      []string{"eng-123-add-rate-limiting"},
+	}
+	proposalRunner := &fakeProposalRunner{result: &exec.ProposalResult{Summary: "Generated OpenSpec proposal artifacts for issue ENG-123 from the activation seed."}}
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	workflow := NewProposalWorkflow(runtimeStore, repoMgr, githubClient, openSpecClient, proposalRunner, logger)
+	if err := workflow.Execute(ctx, run.ID); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	expectedWorktreePath := run.WorktreePath
+	if openSpecClient.worktreePath != expectedWorktreePath {
+		t.Fatalf("expected OpenSpec client worktree path %q, got %q", expectedWorktreePath, openSpecClient.worktreePath)
+	}
+}
+
+func TestProposalWorkflowBlocksWhenApplyInstructionsBlocked(t *testing.T) {
+	ctx := context.Background()
+	runtimeStore := testWorkflowStore(t)
+	_, _, run := seedProposalRun(t, ctx, runtimeStore)
+
+	repoMgr := &fakeProposalRepoManager{hasChanges: true, commitSHA: "abc123"}
+	githubClient := &fakeProposalGitHubClient{token: "installation-token", installationOK: true}
+	openSpecClient := &fakeOpenSpecClient{
+		applyInstructions: &exec.ApplyInstructions{State: "blocked"},
+		changesBefore:     []string{},
+		changesAfter:      []string{"eng-123-add-rate-limiting"},
+	}
+	proposalRunner := &fakeProposalRunner{result: &exec.ProposalResult{Summary: "Generated OpenSpec proposal artifacts for issue ENG-123 from the activation seed."}}
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+
+	workflow := NewProposalWorkflow(runtimeStore, repoMgr, githubClient, openSpecClient, proposalRunner, logger)
+	err := workflow.Execute(ctx, run.ID)
+	if err == nil {
+		t.Fatal("expected Execute() to fail when apply instructions are blocked")
+	}
+
+	retrievedRun, getErr := runtimeStore.GetWorkflowRun(ctx, run.ID)
+	if getErr != nil {
+		t.Fatalf("GetWorkflowRun() error = %v", getErr)
+	}
+	if retrievedRun.Status != "failed" {
+		t.Fatalf("expected failed workflow run, got %q", retrievedRun.Status)
+	}
+	if !strings.Contains(retrievedRun.StatusReason, "blocked") {
+		t.Fatalf("expected blocked reason, got %q", retrievedRun.StatusReason)
 	}
 }
 

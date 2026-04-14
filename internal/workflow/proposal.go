@@ -29,6 +29,7 @@ type proposalGitHubClient interface {
 }
 
 type proposalOpenSpecClient interface {
+	SetWorktreePath(worktreePath string)
 	ListChanges(ctx context.Context) ([]string, error)
 	GetStatus(ctx context.Context, name string) (*exec.ChangeStatus, error)
 	GetApplyInstructions(ctx context.Context, changeName string) (*exec.ApplyInstructions, error)
@@ -93,6 +94,9 @@ func (w *ProposalWorkflow) Execute(ctx context.Context, runID int64) error {
 		"worktree_path", run.WorktreePath,
 	)
 	logger.Info("starting activation proposal workflow", "step", "workflow_start")
+
+	// Scope OpenSpec commands to the run's repository worktree
+	w.openspec.SetWorktreePath(run.WorktreePath)
 
 	if err := w.store.UpdateWorkflowRunStatus(ctx, run.ID, "running", ""); err != nil {
 		return fmt.Errorf("failed to mark workflow run %d running: %w", run.ID, err)

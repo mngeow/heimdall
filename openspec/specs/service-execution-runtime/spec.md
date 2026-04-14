@@ -16,12 +16,17 @@ Heimdall MUST run activation-triggered OpenSpec proposal generation through the 
 - **AND** it records an operator-visible startup failure that identifies the missing executable
 
 ### Requirement: OpenSpec CLI JSON output controls workflow decisions
-Activation-triggered proposal, refine, apply, and archive flows MUST use OpenSpec CLI JSON output for change status, artifact instructions, and apply readiness, and Heimdall MUST NOT guess artifact order or readiness from filesystem conventions alone.
+Activation-triggered proposal, refine, apply, and archive flows MUST use OpenSpec CLI JSON output for change status, change lists, artifact instructions, and apply readiness, and Heimdall MUST parse the actual response shape returned by the CLI rather than assuming a simplified structure.
 
-#### Scenario: Activation proposal is prepared for execution
-- **WHEN** Heimdall prepares the activation-triggered proposal workflow
-- **THEN** it creates or reuses the target change and reads OpenSpec CLI status and artifact instructions
-- **AND** it uses that CLI output to decide which artifacts must be generated before the proposal branch is committed
+#### Scenario: Activation proposal discovers changes through OpenSpec list output
+- **WHEN** Heimdall lists changes before or after activation proposal generation
+- **THEN** it parses the JSON object returned by `openspec list --json`
+- **AND** it uses the named changes from that response to determine which change the workflow should inspect next
+
+#### Scenario: Activation proposal reads apply instructions as a readiness check
+- **WHEN** Heimdall requests `openspec instructions apply --change <name> --json` after proposal generation
+- **THEN** it parses the machine-readable apply-instructions payload returned by the CLI
+- **AND** it keeps the readiness-check step in the workflow instead of skipping it
 
 #### Scenario: Apply workflow is requested from a pull request comment
 - **WHEN** Heimdall prepares to run `/opsx-apply` for an OpenSpec change
@@ -50,12 +55,12 @@ The execution runtime MUST record the command, executor, and version details nee
 - **AND** those records are linked to the workflow run they belong to
 
 ### Requirement: Activation proposal runs from a worktree created off the configured mirror
-Heimdall MUST create the activation proposal worktree from the repository mirror configured by the resolved repository's local mirror path before invoking OpenSpec and OpenCode, and it MUST reconcile stale git worktree registrations that would otherwise block deterministic retry paths.
+Heimdall MUST create the activation proposal worktree from the repository mirror configured by the resolved repository's local mirror path before invoking OpenSpec and OpenCode, and it MUST execute activation proposal OpenSpec discovery and apply-instruction commands in that worktree while reconciling stale git worktree registrations that would otherwise block deterministic retry paths.
 
 #### Scenario: Proposal worktree is created
 - **WHEN** an activated work item starts the proposal pull request workflow for the resolved repository
 - **THEN** Heimdall uses that repository's configured local mirror path as the git source for the new worktree
-- **AND** it runs the proposal execution inside that worktree rather than the bare mirror itself
+- **AND** it runs proposal generation, OpenSpec change discovery, and apply-instruction lookup inside that worktree rather than the bare mirror or Heimdall process cwd
 
 #### Scenario: Git still tracks a stale worktree registration from a prior failed run
 - **WHEN** Heimdall prepares the deterministic proposal worktree path and branch for an activation retry

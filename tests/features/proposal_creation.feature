@@ -65,3 +65,24 @@ Feature: OpenSpec proposal pull request creation from activated work item
       When Heimdall generates the OpenSpec proposal
       Then Heimdall should emit activation proposal logs with workflow step names
       And Heimdall should not log installation tokens or raw proposal prompts
+
+  Rule: Heimdall discovers OpenSpec changes from CLI output
+
+    Scenario: Proposal generation discovers change from OpenSpec list output
+      Given a Linear issue enters active state
+      And the target repository worktree has no existing OpenSpec changes
+      When Heimdall generates the OpenSpec proposal
+      And the proposal creates a new OpenSpec change "eng-123-add-rate-limiting"
+      Then Heimdall should discover the new change from the OpenSpec list output
+      And Heimdall should request apply instructions for the discovered change
+      And Heimdall should persist the discovered change name in the repository binding
+
+    Scenario: Proposal generation readiness check succeeds
+      Given a Linear issue enters active state
+      And the target repository worktree has no existing OpenSpec changes
+      When Heimdall generates the OpenSpec proposal
+      And the proposal creates a new OpenSpec change "eng-123-add-rate-limiting"
+      And the apply instructions for the discovered change indicate state "ready"
+      Then Heimdall should commit the proposal branch
+      And Heimdall should push the proposal branch
+      And Heimdall should create a pull request to main

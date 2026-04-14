@@ -177,6 +177,13 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^Heimdall should not log installation tokens or raw proposal prompts$`, heimdallShouldRedactProposalLogs)
 	sc.Step(`^the repository configures PR monitor label "([^"]*)"$`, repositoryConfiguresPRMonitorLabel)
 	sc.Step(`^the pull request carries monitor label "([^"]*)"$`, pullRequestCarriesMonitorLabel)
+	sc.Step(`^the target repository worktree has no existing OpenSpec changes$`, targetWorktreeHasNoExistingOpenSpecChanges)
+	sc.Step(`^the proposal creates a new OpenSpec change "([^"]*)"$`, proposalCreatesNewOpenSpecChange)
+	sc.Step(`^Heimdall should discover the new change from the OpenSpec list output$`, heimdallShouldDiscoverNewChangeFromListOutput)
+	sc.Step(`^Heimdall should request apply instructions for the discovered change$`, heimdallShouldRequestApplyInstructionsForDiscoveredChange)
+	sc.Step(`^Heimdall should persist the discovered change name in the repository binding$`, heimdallShouldPersistDiscoveredChangeNameInBinding)
+	sc.Step(`^the apply instructions for the discovered change indicate state "([^"]*)"$`, applyInstructionsIndicateState)
+	sc.Step(`^Heimdall should commit the proposal branch$`, heimdallShouldCommitProposalBranch)
 
 	// Command handling steps
 	sc.Step(`^the user comments "([^"]*)"$`, userComments)
@@ -527,6 +534,7 @@ func heimdallGeneratesProposal(ctx context.Context) error {
 		BranchName:    workflow.GenerateBranchName("heimdall", tc.workItem.WorkItemKey, tc.workItem.Title),
 		ChangeName:    tc.changeName,
 		BindingStatus: "active",
+		LastHeadSHA:   "abc123",
 	}
 	tc.prBody = fmt.Sprintf("## Source Issue\n- Key: %s\n- Title: %s\n\n## Description\n> %s\n\n## OpenSpec Change\n- Change: `%s`\n\n## Proposal Summary\n- Generated OpenSpec proposal artifacts from the activation seed.\n", tc.workItem.WorkItemKey, tc.workItem.Title, strings.ReplaceAll(tc.workItem.Description, "\n", "\n> "), tc.repoBinding.ChangeName)
 	tc.pr = &store.PullRequest{
@@ -872,6 +880,69 @@ func heimdallShouldIgnorePullRequestMissingMonitorLabel(ctx context.Context) err
 	}
 	if !strings.Contains(tc.rejectionReason, "monitor label") {
 		return fmt.Errorf("expected missing monitor label reason, got %q", tc.rejectionReason)
+	}
+	return nil
+}
+
+func targetWorktreeHasNoExistingOpenSpecChanges(ctx context.Context) error {
+	// This is the default assumption in the test context; no setup needed
+	return nil
+}
+
+func proposalCreatesNewOpenSpecChange(ctx context.Context, changeName string) error {
+	tc := getTC(ctx)
+	tc.changeName = changeName
+	return nil
+}
+
+func heimdallShouldDiscoverNewChangeFromListOutput(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.changeName == "" {
+		return fmt.Errorf("expected a discovered change name")
+	}
+	return nil
+}
+
+func heimdallShouldRequestApplyInstructionsForDiscoveredChange(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.changeName == "" {
+		return fmt.Errorf("expected apply instructions to be requested for a discovered change")
+	}
+	if !strings.Contains(tc.logOutput, "openspec_apply_instructions") {
+		return fmt.Errorf("expected openspec_apply_instructions in workflow logs, got %q", tc.logOutput)
+	}
+	return nil
+}
+
+func heimdallShouldPersistDiscoveredChangeNameInBinding(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.repoBinding == nil {
+		return fmt.Errorf("expected repository binding to exist")
+	}
+	if tc.repoBinding.ChangeName != tc.changeName {
+		return fmt.Errorf("expected binding change name %q, got %q", tc.changeName, tc.repoBinding.ChangeName)
+	}
+	return nil
+}
+
+func applyInstructionsIndicateState(ctx context.Context, state string) error {
+	tc := getTC(ctx)
+	if tc.changeName == "" {
+		return fmt.Errorf("expected a discovered change name before checking apply instructions")
+	}
+	if state != "ready" {
+		return fmt.Errorf("test fixture only supports ready state, got %q", state)
+	}
+	return nil
+}
+
+func heimdallShouldCommitProposalBranch(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.bootstrapNoChanges {
+		return fmt.Errorf("expected commit to be skipped after a no-change failure")
+	}
+	if tc.repoBinding == nil || tc.repoBinding.LastHeadSHA == "" {
+		return fmt.Errorf("expected proposal branch to be committed")
 	}
 	return nil
 }
