@@ -1,0 +1,22 @@
+{{define "overview.html"}}
+{{template "base.html" .}}
+{{end}}
+
+{{define "content"}}
+<h1>Overview</h1>
+<div class="cards">
+  <div class="card"><div class="value">{{.TotalWorkItems}}</div><div class="label">Total Work Items</div></div>
+  <div class="card"><div class="value">{{.ActiveWorkItems}}</div><div class="label">Active Work Items</div></div>
+  <div class="card"><div class="value">{{.ActivePullRequests}}</div><div class="label">Active PRs</div></div>
+  <div class="card"><div class="value">{{.RunningWorkflowRuns}}</div><div class="label">Running Workflows</div></div>
+  <div class="card"><div class="value">{{.FailedWorkflowRuns}}</div><div class="label">Failed Workflows</div></div>
+  <div class="card"><div class="value">{{.QueuedJobs}}</div><div class="label">Queued Jobs</div></div>
+  <div class="card"><div class="value">{{.RetryableJobs}}</div><div class="label">Retryable Jobs</div></div>
+</div>
+
+<h2>Quick Links</h2>
+<ul>
+  <li><a href="/ui/work-items">Browse work-item queue</a></li>
+  <li><a href="/ui/pull-requests">Browse active pull requests</a></li>
+</ul>
+{{end}}

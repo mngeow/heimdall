@@ -16,6 +16,11 @@ type Store struct {
 	db *sql.DB
 }
 
+// DB returns the underlying *sql.DB for read-only dashboard queries and other extensions.
+func (s *Store) DB() *sql.DB {
+	return s.db
+}
+
 // New creates a new Store instance
 func New(dsn string) (*Store, error) {
 	db, err := sql.Open("sqlite3", dsn)

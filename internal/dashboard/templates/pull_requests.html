@@ -1,0 +1,41 @@
+{{define "pull_requests.html"}}
+{{template "base.html" .}}
+{{end}}
+
+{{define "content"}}
+<h1>Active Pull Requests</h1>
+<div id="pull-requests-table">
+  {{template "pull_requests_table" .}}
+</div>
+{{end}}
+
+{{define "pull_requests_fragment.html"}}
+{{template "pull_requests_table" .}}
+{{end}}
+
+{{define "pull_requests_table"}}
+<table>
+  <thead>
+    <tr>
+      <th>Repo</th>
+      <th># / Title</th>
+      <th>State</th>
+      <th>Work Item</th>
+      <th>Branch / Change</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Rows}}
+    <tr>
+      <td class="muted">{{.RepoRef}}</td>
+      <td><a href="/ui/pull-requests/{{.PullRequestID}}">#{{.Number}} {{.Title}}</a></td>
+      <td><span class="badge">{{.State}}</span></td>
+      <td>{{.WorkItemKey}} {{if .WorkItemTitle}}- {{.WorkItemTitle}}{{end}}</td>
+      <td class="muted">{{.HeadBranch}} {{if .ChangeName}}/ {{.ChangeName}}{{end}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="5" class="muted">No active pull requests found.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

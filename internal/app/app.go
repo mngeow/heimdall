@@ -11,6 +11,7 @@ import (
 
 	"github.com/mngeow/heimdall/internal/board/linear"
 	"github.com/mngeow/heimdall/internal/config"
+	"github.com/mngeow/heimdall/internal/dashboard"
 	internalexec "github.com/mngeow/heimdall/internal/exec"
 	"github.com/mngeow/heimdall/internal/repo"
 	"github.com/mngeow/heimdall/internal/scm/github"
@@ -110,6 +111,13 @@ func (a *App) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", a.healthHandler)
 	mux.HandleFunc("/readyz", a.readyHandler)
+
+	dbQueries := dashboard.NewQueries(a.store.DB())
+	dashHandler, derr := dashboard.NewHandler(dbQueries)
+	if derr != nil {
+		return fmt.Errorf("failed to create dashboard handler: %w", derr)
+	}
+	dashHandler.RegisterRoutes(mux)
 
 	server := &http.Server{
 		Addr:    a.config.Server.ListenAddress,

@@ -10,7 +10,7 @@ Recommended shape:
 - local SQLite database file
 - local repo mirrors and worktrees
 - outbound HTTPS to GitHub and Linear APIs for the standard workflow path
-- optional private HTTP endpoints for health and readiness
+- optional private HTTP endpoints for health, readiness, and a read-only operator dashboard
 
 ## Host Prerequisites
 
@@ -91,8 +91,20 @@ V1 should expose a minimal but useful operations surface:
 
 - `/healthz` for process liveness
 - `/readyz` for dependency readiness
+- `/ui` for a private read-only operator dashboard
 - structured logs in JSON or logfmt
 - counters for polls, detected transitions, PR creations, comment commands, failures, and retries
+
+### Private Operator Dashboard
+
+Heimdall serves a small embedded dashboard from the same Go binary:
+
+- `/ui` — overview with summary counts for work items, active PRs, workflows, and jobs
+- `/ui/work-items` — filterable queue of all tracked Linear work items with status, lifecycle bucket, and latest run context
+- `/ui/pull-requests` — list of active Heimdall-managed pull requests
+- `/ui/pull-requests/{id}` — detail view showing the linked work item, binding, and Heimdall-tracked command/activity history
+
+The dashboard is server-rendered HTML with HTMX-driven partial updates. It is read-only and does not expose secrets, installation tokens, provider credentials, or raw payloads. Because it is served from the same HTTP listener, keep the listen address private (for example, `127.0.0.1:8080` or a local network interface) unless you intentionally want to expose it.
 
 Useful log fields:
 
