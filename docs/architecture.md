@@ -8,7 +8,7 @@ Heimdall should be a single Go binary with three long-running responsibilities:
 - a background poller that watches GitHub for new PR comments and relevant PR state changes
 - an HTTP server for health, readiness, and any private operator endpoints
 
-The two pollers feed a shared workflow engine backed by a persistent store, while the HTTP server exposes health, readiness, and private operator endpoints.
+The two pollers feed a shared workflow engine backed by a persistent store, while the HTTP server exposes health, readiness, and a private read-only operator dashboard.
 
 ```mermaid
 flowchart TB
@@ -18,7 +18,7 @@ flowchart TB
     subgraph Heimdall["Heimdall"]
         Poller["Linear Poller"]
         GitHubPoller["GitHub Poller"]
-        HTTPServer["HTTP Server<br/>health + readiness"]
+        HTTPServer["HTTP Server<br/>health + readiness + dashboard"]
         CommandDispatcher["Command Dispatcher"]
         WorkflowEngine["Workflow Engine"]
         RepoManager["Repo Manager<br/>git/worktree"]
@@ -159,10 +159,12 @@ flowchart TB
     Internal --> OpenSpec["exec/openspec/"]
     Internal --> OpenCode["exec/opencode/"]
     Internal --> SlashCmd["slashcmd/"]
-    Internal --> HTTPServer["httpserver/"]
+    Internal --> Dashboard["dashboard/"]
 ```
 
 Notes:
+- `internal/dashboard/` contains the read-only operator UI (server-rendered HTML + HTMX) and its SQLite-backed query services.
+
 
 - keep `main.go` thin
 - define small interfaces where they are consumed, not in a global `interfaces` package

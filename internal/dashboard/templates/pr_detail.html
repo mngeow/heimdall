@@ -1,0 +1,67 @@
+{{define "pr_detail.html"}}
+{{template "base.html" .}}
+{{end}}
+
+{{define "content"}}
+<h1>#{{.Detail.PullRequest.Number}} {{.Detail.PullRequest.Title}}</h1>
+<p class="muted">
+  <a href="{{.Detail.PullRequest.URL}}" target="_blank">View on GitHub →</a>
+  <span class="badge">{{.Detail.PullRequest.State}}</span>
+  {{.Detail.PullRequest.RepoRef}} — {{.Detail.PullRequest.HeadBranch}}
+</p>
+
+<h2>Linked Work Item</h2>
+<div class="card">
+  <p><strong>{{.Detail.WorkItem.WorkItemKey}}</strong> {{.Detail.WorkItem.Title}}</p>
+  <p class="muted">Status: {{.Detail.WorkItem.StateName}} | Bucket: {{.Detail.WorkItem.LifecycleBucket}} | Team: {{.Detail.WorkItem.Team}}</p>
+</div>
+
+<h2>Heimdall-Tracked Command / Activity History</h2>
+{{if .Detail.Commands}}
+<ul class="timeline">
+  {{range .Detail.Commands}}
+  <li>
+    <div><strong>{{.CommandName}}</strong> {{if .CommandArgs}}— {{.CommandArgs}}{{end}}</div>
+    <div class="meta">Actor: {{.ActorLogin}} | Auth: {{.AuthorizationStatus}} | Status: {{.Status}} {{if .RequestedAgent}}| Agent: {{.RequestedAgent}}{{end}}</div>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="muted">No command activity recorded for this pull request.</p>
+{{end}}
+
+<h2>Workflow Activity</h2>
+{{if .Detail.Workflows}}
+<ul class="timeline">
+  {{range .Detail.Workflows}}
+  <li>
+    <div><strong>{{.RunType}}</strong> — {{.Status}}</div>
+    {{if .StepName}}<div class="meta">Step: {{.StepName}} ({{.StepStatus}}) {{if .Executor}}| Executor: {{.Executor}}{{end}}</div>
+    {{end}}
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="muted">No workflow activity recorded.</p>
+{{end}}
+
+<h2>Audit Timeline</h2>
+{{if .Detail.Audits}}
+<ul class="timeline">
+  {{range .Detail.Audits}}
+  <li>
+    <div><strong>{{.EventType}}</strong> — {{.Summary}}</div>
+    <div class="meta">Severity: {{.Severity}} | Actor: {{.ActorType}} {{if .ActorLogin}}({{.ActorLogin}}){{end}} {{if .AgentName}}| Agent: {{.AgentName}}{{end}} {{if .CommitSHA}}| Commit: {{.CommitSHA}}{{end}}</div>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="muted">No audit events recorded.</p>
+{{end}}
+
+<p><a href="/ui/pull-requests">← Back to pull requests</a></p>
+{{end}}
+
+{{define "pr_detail_fragment.html"}}
+{{template "content" .}}
+{{end}}

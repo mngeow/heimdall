@@ -1,0 +1,62 @@
+{{define "work_items.html"}}
+{{template "base.html" .}}
+{{end}}
+
+{{define "content"}}
+<h1>Work Items</h1>
+<div class="filters">
+  <select name="status" hx-get="/ui/work-items/fragment" hx-target="#work-items-table" hx-push-url="true">
+    <option value="">All statuses</option>
+    {{range .Statuses}}
+    <option value="{{.}}" {{if eq . $.FilterStatus}}selected{{end}}>{{.}}</option>
+    {{end}}
+  </select>
+  <select name="bucket" hx-get="/ui/work-items/fragment" hx-target="#work-items-table" hx-push-url="true">
+    <option value="">All buckets</option>
+    {{range .Buckets}}
+    <option value="{{.}}" {{if eq . $.FilterBucket}}selected{{end}}>{{.}}</option>
+    {{end}}
+  </select>
+  <a href="/ui/work-items"><button type="button">Reset</button></a>
+</div>
+<div id="work-items-table">
+  {{template "work_items_table" .}}
+</div>
+{{end}}
+
+{{define "work_items_fragment.html"}}
+{{template "work_items_table" .}}
+{{end}}
+
+{{define "work_items_table"}}
+<table>
+  <thead>
+    <tr>
+      <th>Key</th>
+      <th>Title</th>
+      <th>Status</th>
+      <th>Bucket</th>
+      <th>Team</th>
+      <th>Repo</th>
+      <th>Branch / Change</th>
+      <th>Latest Run</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Rows}}
+    <tr>
+      <td><span class="badge">{{.WorkItemKey}}</span></td>
+      <td>{{.Title}}</td>
+      <td>{{.StateName}}</td>
+      <td><span class="badge">{{.LifecycleBucket}}</span></td>
+      <td>{{.Team}}</td>
+      <td class="muted">{{.RepoRef}}</td>
+      <td class="muted">{{.BranchName}} {{if .ChangeName}}/ {{.ChangeName}}{{end}}</td>
+      <td><span class="badge">{{.LatestRunStatus}}</span></td>
+    </tr>
+    {{else}}
+    <tr><td colspan="8" class="muted">No work items found.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

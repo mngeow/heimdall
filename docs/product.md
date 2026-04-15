@@ -29,6 +29,8 @@ The happy path for V1 is intentionally small:
 
 The user should not need a separate Heimdall UI in V1.
 
+That said, Heimdall does expose a small, read-only private operator dashboard on its existing HTTP server so operators can quickly inspect queued Linear work items, active automation pull requests, and Heimdall-tracked command/activity history without reading raw SQLite or external logs. This dashboard is server-rendered HTML with HTMX for light interactivity and is intentionally not a workflow-control surface.
+
 ## Ease Of Use Decisions
 
 To keep V1 easy to operate and easy to adopt, the design makes these choices:

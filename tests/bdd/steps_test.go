@@ -3,6 +3,8 @@ package bdd
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -58,6 +60,11 @@ type testContext struct {
 	linearRequests     []string
 	linearCheckpoint   string
 	linearCleanup      func()
+	dashboardServer    *httptest.Server
+	dashboardResponse  *http.Response
+	dashboardBody      string
+	dashboardPR        *store.PullRequest
+	dashboardBinding   *store.RepoBinding
 }
 
 type envState struct {
@@ -116,6 +123,9 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		}
 		if tc.linearCleanup != nil {
 			tc.linearCleanup()
+		}
+		if tc.dashboardServer != nil {
+			tc.dashboardServer.Close()
 		}
 		restoreHeimdallEnv(tc.envSnapshot)
 		return ctx, nil
@@ -225,6 +235,7 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 
 	registerConfigurationSteps(sc)
 	registerLinearPollingSteps(sc)
+	registerDashboardSteps(sc)
 }
 
 // Helper to get testContext from context

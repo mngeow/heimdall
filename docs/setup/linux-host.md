@@ -32,7 +32,7 @@ These should not be required on the production host if Heimdall is shipped as a 
 - a separate database server
 - a public reverse proxy for GitHub command intake
 - a public reverse proxy for Linear intake
-- a browser-based admin UI
+- a separate browser-based admin UI (Heimdall includes a lightweight read-only dashboard served from the same binary)
 
 ## Recommended Host Filesystem Layout
 
@@ -73,7 +73,7 @@ Outbound access:
 Inbound access:
 
 - no public inbound GitHub or Linear webhook access for the standard v1 workflow path
-- optional private access to health and readiness endpoints if the operator wants remote checks
+- optional private access to health, readiness, and the operator dashboard if the operator wants remote checks
 
 Both provider integrations are polling-based in v1, so outbound HTTPS is the critical networking requirement.
 

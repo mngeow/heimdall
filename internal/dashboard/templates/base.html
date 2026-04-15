@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Heimdall Dashboard</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background: #0b0f14; color: #e6edf3; }
+    a { color: #58a6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    nav { display: flex; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #21262d; }
+    nav a { font-weight: 600; }
+    h1, h2, h3 { margin: 0 0 12px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; }
+    .card .value { font-size: 28px; font-weight: 700; }
+    .card .label { color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+    table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #21262d; }
+    th { background: #0d1117; color: #c9d1d9; font-weight: 600; }
+    tr:hover td { background: #0d1117; }
+    .muted { color: #8b949e; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #21262d; }
+    .filters { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    select, button { background: #161b22; color: #e6edf3; border: 1px solid #30363d; border-radius: 8px; padding: 8px 12px; }
+    button { cursor: pointer; }
+    button:hover { background: #21262d; }
+    .timeline { list-style: none; padding: 0; margin: 0; }
+    .timeline li { padding: 12px 0; border-bottom: 1px solid #21262d; }
+    .timeline .meta { color: #8b949e; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <a href="/ui">Overview</a>
+      <a href="/ui/work-items">Work Items</a>
+      <a href="/ui/pull-requests">Pull Requests</a>
+    </nav>
+    {{template "content" .}}
+  </div>
+</body>
+</html>
