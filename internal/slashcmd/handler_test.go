@@ -26,10 +26,16 @@ func TestParser(t *testing.T) {
 			isValid:  true,
 		},
 		{
-			name:     "refine command",
-			comment:  "/heimdall refine Add error handling",
+			name:     "refine command with agent",
+			comment:  "/heimdall refine --agent gpt-5.4 -- Add error handling",
 			expected: "refine",
 			isValid:  true,
+		},
+		{
+			name:     "refine command without agent",
+			comment:  "/heimdall refine Add error handling",
+			expected: "refine",
+			isValid:  false,
 		},
 		{
 			name:     "apply command with agent",
@@ -44,10 +50,60 @@ func TestParser(t *testing.T) {
 			isValid:  false,
 		},
 		{
+			name:     "opencode command with alias and agent",
+			comment:  "/heimdall opencode explore-change --agent gpt-5.4 -- Compare options",
+			expected: "opencode",
+			isValid:  true,
+		},
+		{
+			name:     "approve command with request id",
+			comment:  "/heimdall approve perm_123",
+			expected: "approve",
+			isValid:  true,
+		},
+		{
+			name:     "approve command without request id",
+			comment:  "/heimdall approve",
+			expected: "approve",
+			isValid:  false,
+		},
+		{
 			name:     "no command",
 			comment:  "This is just a regular comment",
 			expected: "",
 			isValid:  false,
+		},
+	}
+
+	promptTests := []struct {
+		name           string
+		comment        string
+		wantPrompt     string
+		wantChangeName string
+	}{
+		{
+			name:           "inline prompt after separator",
+			comment:        "/heimdall refine --agent gpt-5.4 -- Add error handling",
+			wantPrompt:     "Add error handling",
+			wantChangeName: "",
+		},
+		{
+			name:           "multiline prompt after trailing separator",
+			comment:        "/heimdall refine --agent gpt-5.4 --\nGood. But I also want you to include the following:\n1. duckduckgo search tool\n2. Expose this agent via a simple fastapi application",
+			wantPrompt:     "Good. But I also want you to include the following:\n1. duckduckgo search tool\n2. Expose this agent via a simple fastapi application",
+			wantChangeName: "",
+		},
+		{
+			name:           "inline prompt with explicit change name",
+			comment:        "/heimdall refine my-change --agent gpt-5.4 -- Add error handling",
+			wantPrompt:     "Add error handling",
+			wantChangeName: "my-change",
+		},
+		{
+			name:           "no prompt",
+			comment:        "/heimdall refine --agent gpt-5.4",
+			wantPrompt:     "",
+			wantChangeName: "",
 		},
 	}
 
@@ -71,6 +127,21 @@ func TestParser(t *testing.T) {
 
 			if cmd.IsValid != tt.isValid {
 				t.Errorf("expected IsValid=%v, got %v", tt.isValid, cmd.IsValid)
+			}
+		})
+	}
+
+	for _, tt := range promptTests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := parser.Parse(tt.comment)
+			if cmd == nil {
+				t.Fatalf("expected command, got nil")
+			}
+			if cmd.PromptTail != tt.wantPrompt {
+				t.Errorf("PromptTail = %q, want %q", cmd.PromptTail, tt.wantPrompt)
+			}
+			if cmd.ChangeName != tt.wantChangeName {
+				t.Errorf("ChangeName = %q, want %q", cmd.ChangeName, tt.wantChangeName)
 			}
 		})
 	}
@@ -123,6 +194,33 @@ func TestAuthorizer(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAuthorizerAlias(t *testing.T) {
+	repoConfig := config.RepoConfig{
+		AllowedUsers:  []string{"alice"},
+		AllowedAgents: []string{"gpt-5.4"},
+		OpencodeAliases: map[string]config.OpencodeCommandAlias{
+			"explore-change": {Name: "explore-change", Command: "opsx-explore", PermissionProfile: "readonly"},
+		},
+	}
+	authorizer := NewAuthorizer(repoConfig, nil)
+
+	t.Run("allowed alias", func(t *testing.T) {
+		cmd := &Command{Name: "opencode", Agent: "gpt-5.4", Alias: "explore-change"}
+		result := authorizer.Authorize("alice", cmd)
+		if !result.Authorized {
+			t.Fatalf("expected authorized, got rejected: %s", result.Reason)
+		}
+	})
+
+	t.Run("disallowed alias", func(t *testing.T) {
+		cmd := &Command{Name: "opencode", Agent: "gpt-5.4", Alias: "unknown"}
+		result := authorizer.Authorize("alice", cmd)
+		if result.Authorized {
+			t.Fatal("expected rejected for unknown alias")
+		}
+	})
 }
 
 func TestIntakeProcess(t *testing.T) {

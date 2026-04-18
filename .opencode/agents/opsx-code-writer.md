@@ -10,8 +10,12 @@ permission:
     "*": ask
     "git diff*": allow
     "git status*": allow
+    "git *": allow
     "ls *": allow
     "mkdir *": allow
+    "go *": allow
+    "openspec *": allow
+    "head *": allow
 ---
 
 You are an OpenSpec implementation agent for `/opsx-apply`.

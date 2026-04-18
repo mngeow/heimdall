@@ -63,6 +63,10 @@ func (i *Intake) Process(ctx context.Context, repoConfig config.RepoConfig, pr *
 		AuthorizationStatus: "not_checked",
 		DedupeKey:           dedupeKey,
 		Status:              "ignored",
+		ChangeName:          command.ChangeName,
+		Alias:               command.Alias,
+		PromptTail:          command.PromptTail,
+		RequestID:           command.RequestID,
 	}
 
 	if !command.IsValid {
@@ -91,9 +95,13 @@ func (i *Intake) Process(ctx context.Context, repoConfig config.RepoConfig, pr *
 	}
 
 	requestID := request.ID
+	jobType := fmt.Sprintf("pr_command_%s", command.Name)
+	if command.Name == "apply" && strings.HasPrefix(body, "/opsx-apply") {
+		// Compatibility alias: still stored as apply, job type remains pr_command_apply
+	}
 	job := &store.Job{
 		CommandRequestID: &requestID,
-		JobType:          fmt.Sprintf("pr_command_%s", command.Name),
+		JobType:          jobType,
 		LockKey:          store.CreatePullRequestLockKey(pr.ID),
 		Status:           "queued",
 	}

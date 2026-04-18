@@ -95,7 +95,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			work_item_id INTEGER NOT NULL,
 			repository_id INTEGER NOT NULL,
-			branch_name TEXT NOT NULL UNIQUE,
+			branch_name TEXT NOT NULL,
 			change_name TEXT NOT NULL UNIQUE,
 			binding_status TEXT NOT NULL,
 			last_head_sha TEXT,
@@ -133,6 +133,10 @@ func (s *Store) Migrate(ctx context.Context) error {
 			dedupe_key TEXT NOT NULL UNIQUE,
 			workflow_run_id INTEGER,
 			status TEXT NOT NULL,
+			change_name TEXT,
+			alias TEXT,
+			prompt_tail TEXT,
+			request_id TEXT,
 			FOREIGN KEY (pull_request_id) REFERENCES pull_requests(id)
 		);`,
 		`CREATE TABLE IF NOT EXISTS workflow_runs (
@@ -178,6 +182,20 @@ func (s *Store) Migrate(ctx context.Context) error {
 			max_attempts INTEGER NOT NULL DEFAULT 10,
 			FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id),
 			FOREIGN KEY (command_request_id) REFERENCES command_requests(id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS pending_permission_requests (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			request_id TEXT NOT NULL UNIQUE,
+			session_id TEXT NOT NULL,
+			command_request_id INTEGER NOT NULL,
+			pull_request_id INTEGER NOT NULL,
+			repository_id INTEGER NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			resolved_at DATETIME,
+			FOREIGN KEY (command_request_id) REFERENCES command_requests(id),
+			FOREIGN KEY (pull_request_id) REFERENCES pull_requests(id),
+			FOREIGN KEY (repository_id) REFERENCES repositories(id)
 		);`,
 		`CREATE TABLE IF NOT EXISTS audit_events (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,

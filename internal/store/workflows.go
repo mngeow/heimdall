@@ -34,6 +34,10 @@ type CommandRequest struct {
 	DedupeKey           string
 	WorkflowRunID       *int64
 	Status              string
+	ChangeName          string
+	Alias               string
+	PromptTail          string
+	RequestID           string
 }
 
 // WorkflowRun represents a workflow execution
@@ -66,6 +70,19 @@ type WorkflowStep struct {
 	AttemptCount  int
 }
 
+// PendingPermissionRequest represents a blocked opencode permission request.
+type PendingPermissionRequest struct {
+	ID               int64
+	RequestID        string
+	SessionID        string
+	CommandRequestID int64
+	PullRequestID    int64
+	RepositoryID     int64
+	Status           string
+	CreatedAt        time.Time
+	ResolvedAt       *time.Time
+}
+
 // Job represents a queued async job
 type Job struct {
 	ID               int64
@@ -87,6 +104,23 @@ func (s *Store) GetPullRequestByNumber(ctx context.Context, repositoryID int64, 
 		`SELECT id, repository_id, repo_binding_id, provider, provider_pr_node_id, number, title, base_branch, head_branch, state, url
 		 FROM pull_requests WHERE repository_id = ? AND number = ?`,
 		repositoryID, number,
+	).Scan(&pr.ID, &pr.RepositoryID, &pr.RepoBindingID, &pr.Provider, &pr.ProviderPRNodeID, &pr.Number, &pr.Title, &pr.BaseBranch, &pr.HeadBranch, &pr.State, &pr.URL)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &pr, nil
+}
+
+func (s *Store) GetPullRequestByID(ctx context.Context, pullRequestID int64) (*PullRequest, error) {
+	var pr PullRequest
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, repository_id, repo_binding_id, provider, provider_pr_node_id, number, title, base_branch, head_branch, state, url
+		 FROM pull_requests WHERE id = ?`,
+		pullRequestID,
 	).Scan(&pr.ID, &pr.RepositoryID, &pr.RepoBindingID, &pr.Provider, &pr.ProviderPRNodeID, &pr.Number, &pr.Title, &pr.BaseBranch, &pr.HeadBranch, &pr.State, &pr.URL)
 
 	if err == sql.ErrNoRows {
@@ -136,10 +170,27 @@ func (s *Store) SavePullRequest(ctx context.Context, pr *PullRequest) error {
 func (s *Store) GetCommandRequestByDedupeKey(ctx context.Context, dedupeKey string) (*CommandRequest, error) {
 	var req CommandRequest
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status
+		`SELECT id, pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status, change_name, alias, prompt_tail, request_id
 		 FROM command_requests WHERE dedupe_key = ?`,
 		dedupeKey,
-	).Scan(&req.ID, &req.PullRequestID, &req.CommentNodeID, &req.CommandName, &req.CommandArgs, &req.RequestedAgent, &req.ActorLogin, &req.AuthorizationStatus, &req.DedupeKey, &req.WorkflowRunID, &req.Status)
+	).Scan(&req.ID, &req.PullRequestID, &req.CommentNodeID, &req.CommandName, &req.CommandArgs, &req.RequestedAgent, &req.ActorLogin, &req.AuthorizationStatus, &req.DedupeKey, &req.WorkflowRunID, &req.Status, &req.ChangeName, &req.Alias, &req.PromptTail, &req.RequestID)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+func (s *Store) GetCommandRequestByID(ctx context.Context, requestID int64) (*CommandRequest, error) {
+	var req CommandRequest
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status, change_name, alias, prompt_tail, request_id
+		 FROM command_requests WHERE id = ?`,
+		requestID,
+	).Scan(&req.ID, &req.PullRequestID, &req.CommentNodeID, &req.CommandName, &req.CommandArgs, &req.RequestedAgent, &req.ActorLogin, &req.AuthorizationStatus, &req.DedupeKey, &req.WorkflowRunID, &req.Status, &req.ChangeName, &req.Alias, &req.PromptTail, &req.RequestID)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -152,12 +203,12 @@ func (s *Store) GetCommandRequestByDedupeKey(ctx context.Context, dedupeKey stri
 
 func (s *Store) SaveCommandRequest(ctx context.Context, req *CommandRequest) error {
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO command_requests (pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO command_requests (pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status, change_name, alias, prompt_tail, request_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(dedupe_key) DO UPDATE SET
 		 status = excluded.status,
 		 workflow_run_id = excluded.workflow_run_id`,
-		req.PullRequestID, req.CommentNodeID, req.CommandName, req.CommandArgs, req.RequestedAgent, req.ActorLogin, req.AuthorizationStatus, req.DedupeKey, req.WorkflowRunID, req.Status,
+		req.PullRequestID, req.CommentNodeID, req.CommandName, req.CommandArgs, req.RequestedAgent, req.ActorLogin, req.AuthorizationStatus, req.DedupeKey, req.WorkflowRunID, req.Status, req.ChangeName, req.Alias, req.PromptTail, req.RequestID,
 	)
 	if err != nil {
 		return err
@@ -177,6 +228,14 @@ func (s *Store) SaveCommandRequest(ctx context.Context, req *CommandRequest) err
 		}
 	}
 	return nil
+}
+
+func (s *Store) UpdateCommandRequestStatus(ctx context.Context, requestID int64, status string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE command_requests SET status = ? WHERE id = ?`,
+		status, requestID,
+	)
+	return err
 }
 
 // WorkflowRun operations
@@ -253,4 +312,74 @@ func (s *Store) CreateWorkflowStep(ctx context.Context, step *WorkflowStep) erro
 	id, _ := result.LastInsertId()
 	step.ID = id
 	return nil
+}
+
+// GetActiveBindingsByPullRequestID returns active repo bindings linked to a pull request.
+func (s *Store) GetActiveBindingsByPullRequestID(ctx context.Context, pullRequestID int64) ([]*RepoBinding, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT b.id, b.work_item_id, b.repository_id, b.branch_name, b.change_name, b.binding_status, b.last_head_sha, b.created_at, b.updated_at
+		 FROM repo_bindings b
+		 JOIN pull_requests pr ON pr.head_branch = b.branch_name
+		 WHERE pr.id = ? AND b.binding_status = 'active'
+		 ORDER BY b.change_name ASC`,
+		pullRequestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var bindings []*RepoBinding
+	for rows.Next() {
+		var b RepoBinding
+		if err := rows.Scan(&b.ID, &b.WorkItemID, &b.RepositoryID, &b.BranchName, &b.ChangeName, &b.BindingStatus, &b.LastHeadSHA, &b.CreatedAt, &b.UpdatedAt); err != nil {
+			return nil, err
+		}
+		bindings = append(bindings, &b)
+	}
+	return bindings, rows.Err()
+}
+
+// PendingPermissionRequest operations
+
+func (s *Store) CreatePendingPermissionRequest(ctx context.Context, req *PendingPermissionRequest) error {
+	result, err := s.db.ExecContext(ctx,
+		`INSERT INTO pending_permission_requests (request_id, session_id, command_request_id, pull_request_id, repository_id, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		req.RequestID, req.SessionID, req.CommandRequestID, req.PullRequestID, req.RepositoryID, req.Status, time.Now(),
+	)
+	if err != nil {
+		return err
+	}
+	id, _ := result.LastInsertId()
+	req.ID = id
+	return nil
+}
+
+func (s *Store) GetPendingPermissionRequestByID(ctx context.Context, requestID string) (*PendingPermissionRequest, error) {
+	var req PendingPermissionRequest
+	var resolvedAt sql.NullTime
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, request_id, session_id, command_request_id, pull_request_id, repository_id, status, created_at, resolved_at
+		 FROM pending_permission_requests WHERE request_id = ?`,
+		requestID,
+	).Scan(&req.ID, &req.RequestID, &req.SessionID, &req.CommandRequestID, &req.PullRequestID, &req.RepositoryID, &req.Status, &req.CreatedAt, &resolvedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if resolvedAt.Valid {
+		req.ResolvedAt = &resolvedAt.Time
+	}
+	return &req, nil
+}
+
+func (s *Store) ResolvePendingPermissionRequest(ctx context.Context, requestID, status string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE pending_permission_requests SET status = ?, resolved_at = ? WHERE request_id = ?`,
+		status, time.Now(), requestID,
+	)
+	return err
 }

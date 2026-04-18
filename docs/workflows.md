@@ -54,7 +54,23 @@ Detailed flow:
 15. Apply the configured PR monitor label when present.
 16. Emit structured logs for each major workflow step so operators can follow progress and diagnose failures from the host journal.
 
-## Workflow 2: Refine Specs From A PR Comment
+## Workflow 2: PR-Command Execution Model
+
+All PR-comment commands, including `/heimdall status`, follow the same execution model:
+
+1. A GitHub poll cycle observes a new issue comment on a Heimdall-managed pull request.
+2. Heimdall checks that the comment is on a PR, not a plain issue.
+3. Heimdall checks that the commenter is allowed to issue commands.
+4. Heimdall deduplicates the command by comment node id or another stable comment identity.
+5. Heimdall saves the command request and enqueues a PR-command job.
+6. The PR-command worker dequeues the job and loads the persisted command request, pull request, and repository by their durable stored IDs.
+7. The worker dispatches the job to the matching executor, executes it, and posts a PR reply if applicable.
+8. The worker updates the command request and job state to completed, blocked, or failed.
+9. Duplicate later poll observations of the same comment are ignored and must not produce additional outcomes.
+
+This model keeps polling fast and deterministic while executing commands asynchronously through a single background worker loop.
+
+## Workflow 3: Refine Specs From A PR Comment
 
 Refinement is an artifact-only operation. It should update OpenSpec files but not apply implementation tasks.
 
@@ -66,19 +82,7 @@ Recommended command:
 /heimdall refine Clarify rollback behavior and add non-goals.
 ```
 
-Processing steps:
-
-1. A GitHub poll cycle observes a new issue comment on a Heimdall-managed pull request.
-2. Heimdall checks that the comment is on a PR, not a plain issue.
-3. Heimdall checks that the commenter is allowed to issue commands.
-4. Heimdall deduplicates the command by comment node id or another stable comment identity.
-5. Heimdall resolves the branch and associated OpenSpec change.
-6. Heimdall runs the refinement executor against the worktree.
-7. Heimdall commits any changed artifacts.
-8. Heimdall pushes the branch.
-9. Heimdall comments with a short summary of what changed.
-
-Refinement should be scoped to:
+Scope:
 
 - `proposal.md`
 - `design.md`
@@ -106,16 +110,19 @@ Examples:
 
 Processing steps:
 
-1. A GitHub poll cycle observes the command comment on a Heimdall-managed pull request.
-2. Authorize the actor and parse the requested agent.
-3. Check that the agent is allowed for the repository.
-4. Resolve the branch and worktree for the PR.
-5. Ask OpenSpec for apply instructions.
-6. If the change is blocked, comment back with the reason instead of guessing.
-7. Run the apply executor with the selected agent.
-8. Commit task-file updates and code changes together.
-9. Push the branch.
-10. Comment back with completed tasks, remaining tasks, or blockers.
+1. A GitHub poll cycle observes the comment on a Heimdall-managed pull request.
+2. The command intake saves a command request and enqueues a PR-command job.
+3. The PR-command worker dequeues the job by its durable ID.
+4. The worker loads the persisted command request, pull request, and repository.
+5. The worker authorizes the actor and parses the requested agent.
+6. The worker checks that the agent is allowed for that repository.
+7. The worker resolves the branch and worktree for the PR.
+8. The worker asks OpenSpec for apply instructions.
+9. If the change is blocked, the worker comments back with the reason instead of guessing.
+10. The worker runs the apply executor with the selected agent.
+11. The worker commits task-file updates and code changes together.
+12. The worker pushes the branch.
+13. The worker comments back with completed tasks, remaining tasks, or blockers.
 
 ## Workflow 4: Archive From A PR Comment
 

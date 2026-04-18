@@ -265,3 +265,106 @@ func TestJobQueue(t *testing.T) {
 		}
 	})
 }
+
+func TestPendingPermissionRequest(t *testing.T) {
+	ctx := context.Background()
+	runtimeStore, err := New(":memory:")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer runtimeStore.Close()
+
+	if err := runtimeStore.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	if err := runtimeStore.SaveRepository(ctx, &Repository{
+		Provider:        "github",
+		RepoRef:         "github.com/test/repo",
+		Owner:           "test",
+		Name:            "repo",
+		DefaultBranch:   "main",
+		BranchPrefix:    "heimdall",
+		LocalMirrorPath: "/tmp/test-repo.git",
+		IsActive:        true,
+	}); err != nil {
+		t.Fatalf("SaveRepository() error = %v", err)
+	}
+
+	repoRecord, err := runtimeStore.GetRepositoryByRef(ctx, "github.com/test/repo")
+	if err != nil {
+		t.Fatalf("GetRepositoryByRef() error = %v", err)
+	}
+
+	pr := &PullRequest{
+		RepositoryID: repoRecord.ID,
+		Number:       42,
+		HeadBranch:   "heimdall/test",
+		BaseBranch:   "main",
+		State:        "open",
+	}
+	if err := runtimeStore.SavePullRequest(ctx, pr); err != nil {
+		t.Fatalf("SavePullRequest() error = %v", err)
+	}
+
+	t.Run("CreateAndGetPendingPermissionRequest", func(t *testing.T) {
+		req := &PendingPermissionRequest{
+			RequestID:        "perm_123",
+			SessionID:        "sess_456",
+			CommandRequestID: 1,
+			PullRequestID:    pr.ID,
+			RepositoryID:     repoRecord.ID,
+			Status:           "pending",
+		}
+		if err := runtimeStore.CreatePendingPermissionRequest(ctx, req); err != nil {
+			t.Fatalf("CreatePendingPermissionRequest() error = %v", err)
+		}
+		if req.ID == 0 {
+			t.Fatal("expected pending permission request ID to be set")
+		}
+
+		retrieved, err := runtimeStore.GetPendingPermissionRequestByID(ctx, "perm_123")
+		if err != nil {
+			t.Fatalf("GetPendingPermissionRequestByID() error = %v", err)
+		}
+		if retrieved == nil {
+			t.Fatal("expected pending permission request, got nil")
+		}
+		if retrieved.RequestID != "perm_123" {
+			t.Errorf("RequestID = %q, want %q", retrieved.RequestID, "perm_123")
+		}
+		if retrieved.Status != "pending" {
+			t.Errorf("Status = %q, want %q", retrieved.Status, "pending")
+		}
+	})
+
+	t.Run("ResolvePendingPermissionRequest", func(t *testing.T) {
+		if err := runtimeStore.ResolvePendingPermissionRequest(ctx, "perm_123", "approved"); err != nil {
+			t.Fatalf("ResolvePendingPermissionRequest() error = %v", err)
+		}
+
+		retrieved, err := runtimeStore.GetPendingPermissionRequestByID(ctx, "perm_123")
+		if err != nil {
+			t.Fatalf("GetPendingPermissionRequestByID() error = %v", err)
+		}
+		if retrieved == nil {
+			t.Fatal("expected pending permission request, got nil")
+		}
+		if retrieved.Status != "approved" {
+			t.Errorf("Status = %q, want %q", retrieved.Status, "approved")
+		}
+		if retrieved.ResolvedAt == nil {
+			t.Error("expected ResolvedAt to be set")
+		}
+	})
+
+	t.Run("GetUnknownRequestIDReturnsNil", func(t *testing.T) {
+		retrieved, err := runtimeStore.GetPendingPermissionRequestByID(ctx, "perm_unknown")
+		if err != nil {
+			t.Fatalf("GetPendingPermissionRequestByID() error = %v", err)
+		}
+		if retrieved != nil {
+			t.Errorf("expected nil for unknown request ID, got %+v", retrieved)
+		}
+	})
+}
