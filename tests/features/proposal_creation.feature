@@ -66,13 +66,27 @@ Feature: OpenSpec proposal pull request creation from activated work item
       Then Heimdall should emit activation proposal logs with workflow step names
       And Heimdall should not log installation tokens or raw proposal prompts
 
+  Rule: Heimdall derives OpenSpec change names from the normalized Linear ticket title
+
+    Scenario: Change name is derived from the Linear title with spaces converted to hyphens
+      Given a Linear issue "ENG-123" with title "Scaffold a new uv project with a simple pydanticai agent" exists
+      When the issue enters active state
+      Then Heimdall should generate an OpenSpec change named "scaffold-a-new-uv-project-with-a-simple-pydanticai-agent"
+      And Heimdall should persist that change name in the repository binding
+
+    Scenario: Change name normalizes repeated spaces and punctuation into single hyphens
+      Given a Linear issue "ENG-124" with title "Feature:   add   rate limiting, please" exists
+      When the issue enters active state
+      Then Heimdall should generate an OpenSpec change named "feature-add-rate-limiting-please"
+      And Heimdall should persist that change name in the repository binding
+
   Rule: Heimdall discovers OpenSpec changes from CLI output
 
     Scenario: Proposal generation discovers change from OpenSpec list output
       Given a Linear issue enters active state
       And the target repository worktree has no existing OpenSpec changes
       When Heimdall generates the OpenSpec proposal
-      And the proposal creates a new OpenSpec change "eng-123-add-rate-limiting"
+      And the proposal creates a new OpenSpec change "scaffold-a-new-uv-project-with-a-simple-pydanticai-agent"
       Then Heimdall should discover the new change from the OpenSpec list output
       And Heimdall should request apply instructions for the discovered change
       And Heimdall should persist the discovered change name in the repository binding
@@ -81,7 +95,7 @@ Feature: OpenSpec proposal pull request creation from activated work item
       Given a Linear issue enters active state
       And the target repository worktree has no existing OpenSpec changes
       When Heimdall generates the OpenSpec proposal
-      And the proposal creates a new OpenSpec change "eng-123-add-rate-limiting"
+      And the proposal creates a new OpenSpec change "scaffold-a-new-uv-project-with-a-simple-pydanticai-agent"
       And the apply instructions for the discovered change indicate state "ready"
       Then Heimdall should commit the proposal branch
       And Heimdall should push the proposal branch

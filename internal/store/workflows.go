@@ -315,11 +315,35 @@ func (s *Store) CreateWorkflowStep(ctx context.Context, step *WorkflowStep) erro
 }
 
 // GetActiveBindingsByPullRequestID returns active repo bindings linked to a pull request.
+// It prefers the durable repo_binding_id stored on the pull request, then falls back to
+// same-repository branch matching for legacy rows.
 func (s *Store) GetActiveBindingsByPullRequestID(ctx context.Context, pullRequestID int64) ([]*RepoBinding, error) {
+	// First, try the exact binding link if the pull request has one.
+	var directBindingID *int64
+	var prRepoID int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT repository_id, repo_binding_id FROM pull_requests WHERE id = ?`,
+		pullRequestID,
+	).Scan(&prRepoID, &directBindingID)
+	if err != nil {
+		return nil, err
+	}
+	if directBindingID != nil {
+		b, err := s.GetRepoBindingByID(ctx, *directBindingID)
+		if err != nil {
+			return nil, err
+		}
+		if b != nil && b.BindingStatus == "active" {
+			return []*RepoBinding{b}, nil
+		}
+	}
+
+	// Fallback: match by repository and branch name so branch-name collisions
+	// across repositories do not leak into PR-command resolution.
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT b.id, b.work_item_id, b.repository_id, b.branch_name, b.change_name, b.binding_status, b.last_head_sha, b.created_at, b.updated_at
 		 FROM repo_bindings b
-		 JOIN pull_requests pr ON pr.head_branch = b.branch_name
+		 JOIN pull_requests pr ON pr.head_branch = b.branch_name AND pr.repository_id = b.repository_id
 		 WHERE pr.id = ? AND b.binding_status = 'active'
 		 ORDER BY b.change_name ASC`,
 		pullRequestID,
@@ -338,6 +362,23 @@ func (s *Store) GetActiveBindingsByPullRequestID(ctx context.Context, pullReques
 		bindings = append(bindings, &b)
 	}
 	return bindings, rows.Err()
+}
+
+// GetRepoBindingByID loads a single repo binding by its primary key.
+func (s *Store) GetRepoBindingByID(ctx context.Context, bindingID int64) (*RepoBinding, error) {
+	var b RepoBinding
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, work_item_id, repository_id, branch_name, change_name, binding_status, last_head_sha, created_at, updated_at
+		 FROM repo_bindings WHERE id = ?`,
+		bindingID,
+	).Scan(&b.ID, &b.WorkItemID, &b.RepositoryID, &b.BranchName, &b.ChangeName, &b.BindingStatus, &b.LastHeadSHA, &b.CreatedAt, &b.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &b, nil
 }
 
 // PendingPermissionRequest operations

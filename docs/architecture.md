@@ -95,15 +95,15 @@ flowchart TB
     Root["/var/lib/heimdall"] --> Repos["repos/"]
     Root --> Worktrees["worktrees/"]
     Repos --> Mirror["github.com/<owner>/<repo>.git"]
-    Worktrees --> Provider["<provider>/"]
-    Provider --> Issue["<issue-key>/"]
+    Worktrees --> MirrorWorktrees["github.com/<owner>/<repo>-worktrees/<branch-name>"]
 ```
 
 This gives three benefits:
 
-- branch work happens in isolated directories
+- branch work happens in isolated directories next to the mirror
 - repeated runs do not require a full clone every time
 - recovery and cleanup are straightforward
+- PR-command execution uses the same mirror-adjacent worktree path as activation proposal workflows
 
 ## OpenSpec And OpenCode Execution
 

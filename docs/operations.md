@@ -38,7 +38,7 @@ flowchart TB
     Etc --> Key["github-app.pem"]
     VarLib --> State["state/heimdall.db"]
     VarLib --> Repos["repos/github.com/<owner>/<repo>.git"]
-    VarLib --> Worktrees["worktrees/<provider>/<issue-key>/"]
+    VarLib --> Worktrees["repos/github.com/<owner>/<repo>-worktrees/<branch-name>/"]
 ```
 
 ## Configuration Shape

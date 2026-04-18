@@ -99,6 +99,40 @@ Feature: Pull request command handling
       Then Heimdall should reject the command as ambiguous
       And Heimdall should comment that the change name must be specified
 
+  Rule: PR commands use a canonical prepared worktree
+
+    Scenario: Refine validates after preparing the PR worktree
+      Given a Heimdall-managed pull request exists with exactly one active change
+      And the repository allows agent "gpt-5.4"
+      When the user comments "/heimdall refine --agent gpt-5.4 -- Add detail"
+      And Heimdall polls GitHub
+      And the PR-command worker processes the queued job
+      Then Heimdall should derive the worktree path from the repository mirror and PR head branch
+      And Heimdall should prepare that worktree before validating the resolved change
+      And Heimdall should run opencode in the same prepared worktree
+
+    Scenario: Cross-repository branch name collision is ignored
+      Given a Heimdall-managed pull request exists with exactly one active change
+      And another repository has an active binding with the same branch name
+      When the user comments "/heimdall apply --agent gpt-5.4"
+      And Heimdall polls GitHub
+      Then Heimdall should resolve the change only from the pull request's own repository context
+      And Heimdall should not include the other repository's binding as a candidate target
+
+  Rule: Large valid opencode events do not abort PR commands
+
+    Scenario: Refine succeeds when opencode emits a large text event
+      Given a Heimdall-managed pull request exists with exactly one active change
+      And the repository allows agent "gpt-5.4"
+      And opencode emits a large text event before the final outcome
+      When the user comments "/heimdall refine --agent gpt-5.4 -- Add detail"
+      And Heimdall polls GitHub
+      And the PR-command worker processes the queued job
+      Then Heimdall should discover the comment during polling
+      And Heimdall should update the proposal artifacts
+      And Heimdall should commit the changes
+      And Heimdall should push the updated branch
+
   Rule: Unauthorized commands are rejected
 
     Scenario: User not in allowed list

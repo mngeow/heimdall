@@ -108,6 +108,7 @@ func (f *recordingFakeExecClient) ResumeSession(_ context.Context, sessionID str
 	}
 	return &exec.ExecutionOutcome{Status: "success", Summary: "resumed session completed"}, nil
 }
+func (f *recordingFakeExecClient) SetWorktreePath(_ string) {}
 
 func TestPRCommandExecutorResolveChange(t *testing.T) {
 	ctx := context.Background()

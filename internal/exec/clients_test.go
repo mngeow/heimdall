@@ -142,6 +142,63 @@ func TestParseOpencodeEventsMissingIDs(t *testing.T) {
 	}
 }
 
+func TestParseOpencodeEventsLargeTextEventDoesNotAbort(t *testing.T) {
+	// Build a text event with a payload larger than the old bufio.Scanner default limit (64 KiB).
+	largePayload := bytes.Repeat([]byte("x"), 128*1024)
+	events := []byte(`{"type":"step_start","timestamp":1,"sessionID":"ses_abc","part":{"id":"p1","messageID":"m1","sessionID":"ses_abc","snapshot":"s1","type":"step-start"}}
+{"type":"text","timestamp":2,"sessionID":"ses_abc","part":{"id":"p2","messageID":"m2","sessionID":"ses_abc","type":"text","text":"` + string(largePayload) + `"}}
+`)
+	outcome, err := parseOpencodeEvents(bytes.NewReader(events))
+	if err != nil {
+		t.Fatalf("parseOpencodeEvents() error = %v", err)
+	}
+	if outcome != nil {
+		t.Fatalf("expected nil outcome after large text event, got %+v", outcome)
+	}
+}
+
+func TestParseOpencodeEventsPermissionAfterLargeTextEvent(t *testing.T) {
+	largePayload := bytes.Repeat([]byte("y"), 128*1024)
+	events := []byte(`{"type":"text","timestamp":1,"sessionID":"ses_abc","part":{"id":"p1","messageID":"m1","sessionID":"ses_abc","type":"text","text":"` + string(largePayload) + `"}}
+{"type":"permission.asked","timestamp":2,"sessionID":"ses_abc","properties":{"id":"perm_456","sessionID":"ses_abc","permission":"write","patterns":["*.go"]}}
+`)
+	outcome, err := parseOpencodeEvents(bytes.NewReader(events))
+	if err != nil {
+		t.Fatalf("parseOpencodeEvents() error = %v", err)
+	}
+	if outcome == nil {
+		t.Fatal("expected outcome, got nil")
+	}
+	if outcome.Status != "needs_permission" {
+		t.Errorf("Status = %q, want %q", outcome.Status, "needs_permission")
+	}
+	if outcome.RequestID != "perm_456" {
+		t.Errorf("RequestID = %q, want %q", outcome.RequestID, "perm_456")
+	}
+	if outcome.SessionID != "ses_abc" {
+		t.Errorf("SessionID = %q, want %q", outcome.SessionID, "ses_abc")
+	}
+}
+
+func TestParseOpencodeEventsFinalEventWithoutTrailingNewline(t *testing.T) {
+	// Final event line ends at EOF without a trailing newline.
+	events := []byte(`{"type":"step_start","timestamp":1,"sessionID":"ses_def","part":{"id":"p1","messageID":"m1","sessionID":"ses_def","snapshot":"s1","type":"step-start"}}
+{"type":"permission.asked","timestamp":2,"sessionID":"ses_def","properties":{"id":"perm_789","sessionID":"ses_def","permission":"write","patterns":["*.md"]}}`)
+	outcome, err := parseOpencodeEvents(bytes.NewReader(events))
+	if err != nil {
+		t.Fatalf("parseOpencodeEvents() error = %v", err)
+	}
+	if outcome == nil {
+		t.Fatal("expected outcome, got nil")
+	}
+	if outcome.Status != "needs_permission" {
+		t.Errorf("Status = %q, want %q", outcome.Status, "needs_permission")
+	}
+	if outcome.RequestID != "perm_789" {
+		t.Errorf("RequestID = %q, want %q", outcome.RequestID, "perm_789")
+	}
+}
+
 func TestOpenSpecClientGetApplyInstructionsParsesJSONWithProgressPrefix(t *testing.T) {
 	tempDir := t.TempDir()
 
