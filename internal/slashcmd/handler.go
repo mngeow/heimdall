@@ -22,38 +22,78 @@ func NewParser(logger *slog.Logger) *Parser {
 
 // Command represents a parsed command
 type Command struct {
-	Name    string
-	Args    []string
-	Agent   string
-	Raw     string
-	IsValid bool
-	Error   string
+	Name       string
+	Args       []string
+	Agent      string
+	ChangeName string
+	Alias      string
+	PromptTail string
+	RequestID  string
+	Raw        string
+	IsValid    bool
+	Error      string
 }
 
-// Parse parses a comment body for commands
+// Parse parses a comment body for commands.
+// It finds the first command line, then preserves the rest of the comment
+// as prompt tail when the command uses a standalone "--" separator.
 func (p *Parser) Parse(comment string) *Command {
 	lines := strings.Split(comment, "\n")
 
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+	var commandLine string
+	var commandLineIndex int
 
-		// Check for /heimdall commands
-		if strings.HasPrefix(line, "/heimdall ") {
-			return p.parseHeimdallCommand(line)
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "/heimdall ") {
+			commandLine = trimmed
+			commandLineIndex = i
+			break
 		}
-
-		// Check for /opsx-apply
-		if strings.HasPrefix(line, "/opsx-apply") {
-			return p.parseOpsxApplyCommand(line)
+		if strings.HasPrefix(trimmed, "/opsx-apply") {
+			commandLine = trimmed
+			commandLineIndex = i
+			break
 		}
-
-		// Check for /opsx-archive
-		if strings.HasPrefix(line, "/opsx-archive") {
-			return p.parseOpsxArchiveCommand(line)
+		if strings.HasPrefix(trimmed, "/opsx-archive") {
+			commandLine = trimmed
+			commandLineIndex = i
+			break
 		}
 	}
 
-	return nil
+	if commandLine == "" {
+		return nil
+	}
+
+	var cmd *Command
+	if strings.HasPrefix(commandLine, "/heimdall ") {
+		cmd = p.parseHeimdallCommand(commandLine)
+	} else if strings.HasPrefix(commandLine, "/opsx-apply") {
+		cmd = p.parseOpsxApplyCommand(commandLine)
+	} else if strings.HasPrefix(commandLine, "/opsx-archive") {
+		cmd = p.parseOpsxArchiveCommand(commandLine)
+	}
+
+	if cmd == nil {
+		return nil
+	}
+
+	// Preserve multiline prompt tail after the first standalone "--"
+	// on the command line, or when the command line ends with "--"
+	// and the prompt continues on later lines.
+	if idx := strings.Index(commandLine, " -- "); idx != -1 {
+		cmd.PromptTail = strings.TrimSpace(commandLine[idx+4:])
+	} else if strings.HasSuffix(commandLine, " --") {
+		// Prompt continues on subsequent lines
+		if commandLineIndex+1 < len(lines) {
+			promptLines := lines[commandLineIndex+1:]
+			cmd.PromptTail = strings.TrimSpace(strings.Join(promptLines, "\n"))
+		}
+	}
+
+	return cmd
 }
 
 func (p *Parser) parseHeimdallCommand(line string) *Command {
@@ -71,14 +111,10 @@ func (p *Parser) parseHeimdallCommand(line string) *Command {
 			Raw:     line,
 			IsValid: true,
 		}
-	case "refine":
-		instruction := strings.TrimSpace(strings.TrimPrefix(line, "/heimdall refine"))
-		return &Command{
-			Name:    "refine",
-			Args:    []string{instruction},
-			Raw:     line,
-			IsValid: true,
-		}
+	case "refine", "apply", "opencode":
+		return p.parseAgentDrivenCommand(subcommand, line)
+	case "approve":
+		return p.parseApproveCommand(line)
 	default:
 		return &Command{
 			Name:    subcommand,
@@ -88,27 +124,64 @@ func (p *Parser) parseHeimdallCommand(line string) *Command {
 	}
 }
 
-func (p *Parser) parseOpsxApplyCommand(line string) *Command {
-	parts := strings.Fields(line)
+func (p *Parser) parseAgentDrivenCommand(name, line string) *Command {
 	cmd := &Command{
-		Name:    "apply",
+		Name:    name,
 		Raw:     line,
 		IsValid: true,
 	}
 
-	// Parse arguments
+	// Split on standalone "--" to separate arguments from prompt tail for inline prompts
+	var argsLine string
+	if idx := strings.Index(line, " -- "); idx != -1 {
+		argsLine = line[:idx]
+	} else {
+		argsLine = line
+	}
+	// Remove trailing " --" so it does not interfere with positional parsing
+	if strings.HasSuffix(argsLine, " --") {
+		argsLine = strings.TrimSuffix(argsLine, " --")
+	}
+
+	parts := strings.Fields(argsLine)
+	if name == "opencode" && len(parts) >= 3 {
+		cmd.Alias = parts[2]
+	}
+
 	for i, part := range parts {
 		if part == "--agent" && i+1 < len(parts) {
 			cmd.Agent = parts[i+1]
 		}
 	}
 
-	// Agent is required
+	// Extract optional change-name (first positional after subcommand/alias)
+	posIndex := 2
+	if name == "opencode" {
+		posIndex = 3
+	}
+	for i := posIndex; i < len(parts); i++ {
+		if strings.HasPrefix(parts[i], "--") {
+			// Skip flags and their values
+			if parts[i] == "--agent" && i+1 < len(parts) {
+				i++ // skip the agent value too
+			}
+			continue
+		}
+		cmd.ChangeName = parts[i]
+		break
+	}
+
 	if cmd.Agent == "" {
 		cmd.IsValid = false
 		cmd.Error = "missing --agent flag"
 	}
 
+	return cmd
+}
+
+func (p *Parser) parseOpsxApplyCommand(line string) *Command {
+	cmd := p.parseAgentDrivenCommand("apply", line)
+	cmd.Raw = line
 	return cmd
 }
 
@@ -118,6 +191,22 @@ func (p *Parser) parseOpsxArchiveCommand(line string) *Command {
 		Raw:     line,
 		IsValid: true,
 	}
+}
+
+func (p *Parser) parseApproveCommand(line string) *Command {
+	parts := strings.Fields(line)
+	cmd := &Command{
+		Name:    "approve",
+		Raw:     line,
+		IsValid: true,
+	}
+	if len(parts) >= 3 {
+		cmd.RequestID = parts[2]
+	} else {
+		cmd.IsValid = false
+		cmd.Error = "missing permission request ID"
+	}
+	return cmd
 }
 
 // Authorizer handles command authorization
@@ -158,8 +247,8 @@ func (a *Authorizer) Authorize(actor string, cmd *Command) *AuthorizationResult 
 		}
 	}
 
-	// Check agent authorization for apply commands
-	if cmd.Name == "apply" && cmd.Agent != "" {
+	// Agent authorization for agent-driven commands
+	if (cmd.Name == "refine" || cmd.Name == "apply" || cmd.Name == "opencode") && cmd.Agent != "" {
 		agentAllowed := false
 		for _, agent := range a.repoConfig.AllowedAgents {
 			if agent == cmd.Agent {
@@ -172,6 +261,16 @@ func (a *Authorizer) Authorize(actor string, cmd *Command) *AuthorizationResult 
 			return &AuthorizationResult{
 				Authorized: false,
 				Reason:     fmt.Sprintf("agent %s is not in allowed agents list", cmd.Agent),
+			}
+		}
+	}
+
+	// Alias authorization for opencode commands
+	if cmd.Name == "opencode" && cmd.Alias != "" {
+		if _, ok := a.repoConfig.OpencodeAliases[cmd.Alias]; !ok {
+			return &AuthorizationResult{
+				Authorized: false,
+				Reason:     fmt.Sprintf("alias %s is not configured for this repository", cmd.Alias),
 			}
 		}
 	}
@@ -206,6 +305,10 @@ func (h *Handler) Handle(ctx context.Context, cmd *Command, prID int64, actor st
 		return h.handleRefine(ctx, cmd, prID, actor)
 	case "apply":
 		return h.handleApply(ctx, cmd, prID, actor)
+	case "opencode":
+		return h.handleOpencode(ctx, cmd, prID, actor)
+	case "approve":
+		return h.handleApprove(ctx, cmd, prID, actor)
 	default:
 		return fmt.Errorf("unknown command: %s", cmd.Name)
 	}
@@ -219,12 +322,24 @@ func (h *Handler) handleStatus(ctx context.Context, prID int64) error {
 
 func (h *Handler) handleRefine(ctx context.Context, cmd *Command, prID int64, actor string) error {
 	// TODO: Enqueue refine workflow
-	h.logger.Info("handling refine command", "pr_id", prID, "instruction", cmd.Args)
+	h.logger.Info("handling refine command", "pr_id", prID, "change", cmd.ChangeName, "agent", cmd.Agent, "prompt", cmd.PromptTail)
 	return nil
 }
 
 func (h *Handler) handleApply(ctx context.Context, cmd *Command, prID int64, actor string) error {
 	// TODO: Enqueue apply workflow
-	h.logger.Info("handling apply command", "pr_id", prID, "agent", cmd.Agent)
+	h.logger.Info("handling apply command", "pr_id", prID, "change", cmd.ChangeName, "agent", cmd.Agent, "prompt", cmd.PromptTail)
+	return nil
+}
+
+func (h *Handler) handleOpencode(ctx context.Context, cmd *Command, prID int64, actor string) error {
+	// TODO: Enqueue generic opencode workflow
+	h.logger.Info("handling opencode command", "pr_id", prID, "change", cmd.ChangeName, "agent", cmd.Agent, "alias", cmd.Alias, "prompt", cmd.PromptTail)
+	return nil
+}
+
+func (h *Handler) handleApprove(ctx context.Context, cmd *Command, prID int64, actor string) error {
+	// TODO: Enqueue approval workflow
+	h.logger.Info("handling approve command", "pr_id", prID, "request_id", cmd.RequestID)
 	return nil
 }

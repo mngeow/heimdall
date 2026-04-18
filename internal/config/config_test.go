@@ -243,6 +243,49 @@ func validEnvMap(baseBranch string) map[string]string {
 	}
 }
 
+func TestLoadFromDirParsesOpencodeAliases(t *testing.T) {
+	clearHeimdallEnv(t)
+	projectRoot := t.TempDir()
+	writeTestFile(t, filepath.Join(projectRoot, ".env"), validDotenvWithExtra("main",
+		"HEIMDALL_REPO_PLATFORM_OPENCODE_COMMANDS=explore-change",
+		"HEIMDALL_REPO_PLATFORM_OPENCODE_COMMAND_EXPLORE_CHANGE_COMMAND=opsx-explore",
+		"HEIMDALL_REPO_PLATFORM_OPENCODE_COMMAND_EXPLORE_CHANGE_PERMISSION_PROFILE=readonly",
+	))
+
+	cfg, err := LoadFromDir(projectRoot)
+	if err != nil {
+		t.Fatalf("LoadFromDir() error = %v", err)
+	}
+	alias, ok := cfg.Repos[0].OpencodeAliases["explore-change"]
+	if !ok {
+		t.Fatalf("expected explore-change alias")
+	}
+	if alias.Command != "opsx-explore" {
+		t.Fatalf("expected command opsx-explore, got %q", alias.Command)
+	}
+	if alias.PermissionProfile != "readonly" {
+		t.Fatalf("expected profile readonly, got %q", alias.PermissionProfile)
+	}
+}
+
+func TestLoadFromDirRejectsInvalidOpencodeAliasProfile(t *testing.T) {
+	clearHeimdallEnv(t)
+	projectRoot := t.TempDir()
+	writeTestFile(t, filepath.Join(projectRoot, ".env"), validDotenvWithExtra("main",
+		"HEIMDALL_REPO_PLATFORM_OPENCODE_COMMANDS=explore-change",
+		"HEIMDALL_REPO_PLATFORM_OPENCODE_COMMAND_EXPLORE_CHANGE_COMMAND=opsx-explore",
+		"HEIMDALL_REPO_PLATFORM_OPENCODE_COMMAND_EXPLORE_CHANGE_PERMISSION_PROFILE=invalid",
+	))
+
+	_, err := LoadFromDir(projectRoot)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "PERMISSION_PROFILE") {
+		t.Fatalf("expected permission profile validation error, got %v", err)
+	}
+}
+
 func validDotenv(baseBranch string) string {
 	lines := make([]string, 0, len(validEnvMap(baseBranch)))
 	for key, value := range validEnvMap(baseBranch) {

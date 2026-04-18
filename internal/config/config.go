@@ -58,6 +58,13 @@ type GitHubConfig struct {
 	PrivateKey     string
 }
 
+// OpencodeCommandAlias maps a repository alias to an opencode command name and permission profile.
+type OpencodeCommandAlias struct {
+	Name              string
+	Command           string
+	PermissionProfile string
+}
+
 // RepoConfig represents a managed repository.
 type RepoConfig struct {
 	ID                      string
@@ -70,6 +77,8 @@ type RepoConfig struct {
 	AllowedAgents           []string `env:"ALLOWED_AGENTS,required" envSeparator:","`
 	AllowedUsers            []string `env:"ALLOWED_USERS,required" envSeparator:","`
 	DefaultSpecWritingAgent string   `env:"DEFAULT_SPEC_WRITING_AGENT,required,notEmpty"`
+	OpencodeCommands        []string `env:"OPENCODE_COMMANDS" envSeparator:","`
+	OpencodeAliases         map[string]OpencodeCommandAlias
 }
 
 type rootEnvConfig struct {
@@ -273,8 +282,45 @@ func loadRepoConfig(environment map[string]string, repoID string) (RepoConfig, e
 	repoConfig.AllowedAgents = trimNonEmpty(repoConfig.AllowedAgents)
 	repoConfig.AllowedUsers = trimNonEmpty(repoConfig.AllowedUsers)
 	repoConfig.DefaultSpecWritingAgent = strings.TrimSpace(repoConfig.DefaultSpecWritingAgent)
+	repoConfig.OpencodeCommands = trimNonEmpty(repoConfig.OpencodeCommands)
+
+	aliases, err := loadOpencodeAliases(environment, repoID, repoConfig.OpencodeCommands)
+	if err != nil {
+		return RepoConfig{}, err
+	}
+	repoConfig.OpencodeAliases = aliases
 
 	return repoConfig, nil
+}
+
+func loadOpencodeAliases(environment map[string]string, repoID string, aliasNames []string) (map[string]OpencodeCommandAlias, error) {
+	aliases := make(map[string]OpencodeCommandAlias, len(aliasNames))
+	for _, name := range aliasNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		upper := strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
+		prefix := repoEnvPrefix(repoID) + "OPENCODE_COMMAND_" + upper + "_"
+		cmd := strings.TrimSpace(environment[prefix+"COMMAND"])
+		profile := strings.TrimSpace(environment[prefix+"PERMISSION_PROFILE"])
+		if cmd == "" {
+			return nil, fmt.Errorf("HEIMDALL_REPO_%s_OPENCODE_COMMAND_%s_COMMAND must not be empty", repoID, upper)
+		}
+		validProfiles := map[string]bool{"readonly": true, "openspec-write": true, "repo-write": true}
+		if profile == "" || !validProfiles[profile] {
+			return nil, fmt.Errorf("HEIMDALL_REPO_%s_OPENCODE_COMMAND_%s_PERMISSION_PROFILE must be one of readonly, openspec-write, repo-write", repoID, upper)
+		}
+		if _, exists := aliases[name]; exists {
+			return nil, fmt.Errorf("duplicate opencode alias %q for repository %s", name, repoID)
+		}
+		aliases[name] = OpencodeCommandAlias{
+			Name:              name,
+			Command:           cmd,
+			PermissionProfile: profile,
+		}
+	}
+	return aliases, nil
 }
 
 func selectGitHubPrivateKey(cfg githubEnvConfig) string {

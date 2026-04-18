@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -85,6 +86,59 @@ fi
 
 	if len(changes) != 0 {
 		t.Fatalf("ListChanges() = %v, want empty slice", changes)
+	}
+}
+
+func TestParseOpencodeEventsDetectsPermissionAsked(t *testing.T) {
+	events := []byte(`{"type":"step_start","timestamp":1,"sessionID":"ses_abc","part":{"id":"p1","messageID":"m1","sessionID":"ses_abc","snapshot":"s1","type":"step-start"}}
+{"type":"permission.asked","timestamp":2,"sessionID":"ses_abc","properties":{"id":"perm_123","sessionID":"ses_abc","permission":"write","patterns":["*.md"]}}
+`)
+	outcome, err := parseOpencodeEvents(bytes.NewReader(events))
+	if err != nil {
+		t.Fatalf("parseOpencodeEvents() error = %v", err)
+	}
+	if outcome == nil {
+		t.Fatal("expected outcome, got nil")
+	}
+	if outcome.Status != "needs_permission" {
+		t.Errorf("Status = %q, want %q", outcome.Status, "needs_permission")
+	}
+	if outcome.RequestID != "perm_123" {
+		t.Errorf("RequestID = %q, want %q", outcome.RequestID, "perm_123")
+	}
+	if outcome.SessionID != "ses_abc" {
+		t.Errorf("SessionID = %q, want %q", outcome.SessionID, "ses_abc")
+	}
+}
+
+func TestParseOpencodeEventsIgnoresHelpText(t *testing.T) {
+	// Simulate CLI help output as non-JSON lines
+	help := []byte(`Usage: opencode run [options] <message>
+Options:
+  --agent <name>   agent to use
+`)
+	outcome, err := parseOpencodeEvents(bytes.NewReader(help))
+	if err != nil {
+		t.Fatalf("parseOpencodeEvents() error = %v", err)
+	}
+	if outcome != nil {
+		t.Fatalf("expected nil outcome for help text, got %+v", outcome)
+	}
+}
+
+func TestParseOpencodeEventsMissingIDs(t *testing.T) {
+	// permission.asked without id should become error, not needs_permission
+	events := []byte(`{"type":"permission.asked","timestamp":1,"sessionID":"ses_abc","properties":{"sessionID":"ses_abc"}}
+`)
+	outcome, err := parseOpencodeEvents(bytes.NewReader(events))
+	if err != nil {
+		t.Fatalf("parseOpencodeEvents() error = %v", err)
+	}
+	if outcome == nil {
+		t.Fatal("expected error outcome, got nil")
+	}
+	if outcome.Status != "error" {
+		t.Errorf("Status = %q, want %q", outcome.Status, "error")
 	}
 }
 

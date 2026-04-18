@@ -25,19 +25,25 @@ type activationWorkflowExecutor interface {
 	Execute(context.Context, int64) error
 }
 
+// PRCommandWorkerRunner is the interface consumed by the app runtime
+type PRCommandWorkerRunner interface {
+	ProcessJob(ctx context.Context) error
+}
+
 // App represents the Heimdall application
 type App struct {
-	config         *config.Config
-	logger         *slog.Logger
-	deps           *validation.Dependencies
-	store          *store.Store
-	linearProvider *linear.Provider
-	githubPoller   *github.Poller
-	workflowQueue  *store.JobQueue
-	router         *workflow.Router
-	commandIntake  *slashcmd.Intake
-	activationFlow activationWorkflowExecutor
-	ready          bool
+	config          *config.Config
+	logger          *slog.Logger
+	deps            *validation.Dependencies
+	store           *store.Store
+	linearProvider  *linear.Provider
+	githubPoller    *github.Poller
+	workflowQueue   *store.JobQueue
+	router          *workflow.Router
+	commandIntake   *slashcmd.Intake
+	activationFlow  activationWorkflowExecutor
+	prCommandWorker PRCommandWorkerRunner
+	ready           bool
 }
 
 // New creates a new Heimdall application
@@ -76,18 +82,22 @@ func New(ctx context.Context) (*App, error) {
 	repoManager := repo.NewManager("")
 	proposalRunner := internalexec.NewOpenCodeProposalRunner()
 
+	prCmdExecutor := workflow.NewPRCommandExecutor(runtimeStore, repoManager, githubClient, internalexec.NewOpenSpecClient(""), internalexec.NewOpenCodeClient(""), logger)
+	prCmdWorker := workflow.NewPRCommandWorker(queue, prCmdExecutor, logger)
+
 	return &App{
-		config:         cfg,
-		logger:         logger,
-		deps:           validation.DefaultDependencies(),
-		store:          runtimeStore,
-		linearProvider: linear.NewProvider(cfg.Linear.APIToken, cfg.Linear.ProjectName, cfg.Linear.ActiveStates, cfg.Linear.PollInterval, runtimeStore),
-		githubPoller:   github.NewPoller(githubClient, runtimeStore, cfg.GitHub.LookbackWindow),
-		workflowQueue:  queue,
-		router:         workflow.NewRouter(cfg.Repos),
-		commandIntake:  slashcmd.NewIntake(runtimeStore, queue, logger),
-		activationFlow: workflow.NewProposalWorkflow(runtimeStore, repoManager, githubClient, internalexec.NewOpenSpecClient(""), proposalRunner, logger),
-		ready:          false,
+		config:          cfg,
+		logger:          logger,
+		deps:            validation.DefaultDependencies(),
+		store:           runtimeStore,
+		linearProvider:  linear.NewProvider(cfg.Linear.APIToken, cfg.Linear.ProjectName, cfg.Linear.ActiveStates, cfg.Linear.PollInterval, runtimeStore),
+		githubPoller:    github.NewPoller(githubClient, runtimeStore, cfg.GitHub.LookbackWindow),
+		workflowQueue:   queue,
+		router:          workflow.NewRouter(cfg.Repos),
+		commandIntake:   slashcmd.NewIntake(runtimeStore, queue, logger),
+		activationFlow:  workflow.NewProposalWorkflow(runtimeStore, repoManager, githubClient, internalexec.NewOpenSpecClient(""), proposalRunner, logger),
+		prCommandWorker: prCmdWorker,
+		ready:           false,
 	}, nil
 }
 
@@ -107,6 +117,7 @@ func (a *App) Run(ctx context.Context) error {
 
 	go a.runLinearPolling(ctx)
 	go a.runGitHubPolling(ctx)
+	go a.runPRCommandWorker(ctx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", a.healthHandler)
@@ -138,6 +149,19 @@ func (a *App) Run(ctx context.Context) error {
 		return nil
 	}
 	return err
+}
+
+func (a *App) runPRCommandWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if err := a.prCommandWorker.ProcessJob(ctx); err != nil {
+			a.logger.Error("pr command job failed", "error", err)
+		}
+	}
 }
 
 func (a *App) runGitHubPolling(ctx context.Context) {

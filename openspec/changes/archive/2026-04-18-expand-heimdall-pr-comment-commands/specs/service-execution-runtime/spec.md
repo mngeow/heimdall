@@ -1,37 +1,4 @@
-# Service: Execution Runtime
-
-## ADDED Requirements
-
-### Requirement: OpenSpec and OpenCode execution runs locally on the host
-Heimdall MUST run activation-triggered OpenSpec proposal generation through the local `openspec` and `opencode` CLIs on the Linux host where Heimdall is running, and it MUST verify that required local executables such as `git`, `openspec`, and `opencode` are available before the service reports readiness.
-
-#### Scenario: Activation proposal is requested for an activated work item
-- **WHEN** Heimdall begins an activation-triggered proposal workflow for a routed work item
-- **THEN** it invokes the local `openspec` and `opencode` tooling available on the host by using the repository's configured default spec-writing agent
-- **AND** it performs that execution inside the repository worktree created for the workflow run
-
-#### Scenario: Required executable is missing at startup
-- **WHEN** Heimdall starts and one of `git`, `openspec`, or `opencode` is unavailable on the configured executable path
-- **THEN** the service does not report ready for workflow execution
-- **AND** it records an operator-visible startup failure that identifies the missing executable
-
-### Requirement: OpenSpec CLI JSON output controls workflow decisions
-Activation-triggered proposal, refine, apply, and archive flows MUST use OpenSpec CLI JSON output for change status, change lists, artifact instructions, and apply readiness, and Heimdall MUST parse the actual response shape returned by the CLI rather than assuming a simplified structure.
-
-#### Scenario: Activation proposal discovers changes through OpenSpec list output
-- **WHEN** Heimdall lists changes before or after activation proposal generation
-- **THEN** it parses the JSON object returned by `openspec list --json`
-- **AND** it uses the named changes from that response to determine which change the workflow should inspect next
-
-#### Scenario: Activation proposal reads apply instructions as a readiness check
-- **WHEN** Heimdall requests `openspec instructions apply --change <name> --json` after proposal generation
-- **THEN** it parses the machine-readable apply-instructions payload returned by the CLI
-- **AND** it keeps the readiness-check step in the workflow instead of skipping it
-
-#### Scenario: Apply workflow is requested from a pull request comment
-- **WHEN** Heimdall prepares to run `/opsx-apply` for an OpenSpec change
-- **THEN** it reads OpenSpec apply instructions and current status from CLI JSON output
-- **AND** it does not guess task readiness or context file selection from filesystem conventions alone
+## MODIFIED Requirements
 
 ### Requirement: Agent selection is explicit and policy-controlled
 The execution runtime MUST use the repository's configured default spec-writing agent only for activation-triggered proposal generation. For `/heimdall refine`, `/heimdall apply`, `/opsx-apply`, and `/heimdall opencode`, Heimdall MUST require an explicitly selected agent that is allowed for the repository, MUST preserve the raw prompt tail after the first standalone `--`, MUST resolve exactly one target change before execution starts, MUST verify that the resolved change exists in the active worktree before invoking opencode, and `/heimdall opencode` MUST also require an allowlisted command alias for that repository.
@@ -70,6 +37,8 @@ The execution runtime MUST use the repository's configured default spec-writing 
 - **WHEN** a pull request comment requests `/heimdall opencode explore-change --agent gpt-5.4` and `explore-change` is not allowlisted for that repository
 - **THEN** Heimdall does not start the generic opencode execution
 - **AND** it records and reports that the requested command alias is not authorized for that repository
+
+## ADDED Requirements
 
 ### Requirement: PR-comment opencode runs use supported invocation and machine-readable events
 Heimdall MUST invoke PR-comment-driven refine and apply runs by using supported opencode invocation forms, including positional messages when the CLI path is used, and MUST request machine-readable JSON events for non-interactive CLI execution. Heimdall MUST classify blocked-permission, blocked-input, resumed, and terminal error outcomes from structured event data rather than keyword matching generic stdout, stderr, or CLI help text.
@@ -139,33 +108,3 @@ Heimdall MUST run PR-comment-driven opencode executions without interactive stdi
 - **WHEN** Heimdall receives `/heimdall approve perm_123` but `perm_123` is unknown, already resolved, expired, or scoped to another pull request
 - **THEN** it does not send a permission reply to opencode for that request
 - **AND** it reports that the approval command was rejected
-
-### Requirement: Execution metadata is auditable
-The execution runtime MUST record the command, executor, and version details needed to audit and troubleshoot proposal, refine, apply, archive, and activation-triggered proposal steps.
-
-#### Scenario: Heimdall runs an OpenSpec or OpenCode step
-- **WHEN** Heimdall executes a workflow step through `openspec`, `opencode`, `git`, or GitHub API-backed repository mutation logic
-- **THEN** it records the step outcome and the executor details needed for audit and recovery
-- **AND** those records are linked to the workflow run they belong to
-
-### Requirement: Activation proposal runs from a worktree created off the configured mirror
-Heimdall MUST create the activation proposal worktree from the repository mirror configured by the resolved repository's local mirror path before invoking OpenSpec and OpenCode, and it MUST execute activation proposal OpenSpec discovery and apply-instruction commands in that worktree while reconciling stale git worktree registrations that would otherwise block deterministic retry paths.
-
-#### Scenario: Proposal worktree is created
-- **WHEN** an activated work item starts the proposal pull request workflow for the resolved repository
-- **THEN** Heimdall uses that repository's configured local mirror path as the git source for the new worktree
-- **AND** it runs proposal generation, OpenSpec change discovery, and apply-instruction lookup inside that worktree rather than the bare mirror or Heimdall process cwd
-
-#### Scenario: Git still tracks a stale worktree registration from a prior failed run
-- **WHEN** Heimdall prepares the deterministic proposal worktree path and branch for an activation retry
-- **AND** git still reports that branch or worktree path as registered even though the prior worktree location is missing or otherwise prunable
-- **THEN** Heimdall prunes or removes the stale git worktree registration before retrying worktree creation
-- **AND** it does not require manual operator cleanup just to recreate the deterministic proposal worktree
-
-### Requirement: Activation proposal generation fails visibly when no commit-ready artifacts are produced
-Heimdall MUST fail the activation proposal workflow when the proposal-generation execution completes without producing repository changes for the target OpenSpec change that can be committed.
-
-#### Scenario: Proposal generation produces no file changes
-- **WHEN** the activation-triggered proposal run exits without leaving any modified, added, or deleted repository files for the target change
-- **THEN** Heimdall does not create an empty commit, branch push, or pull request
-- **AND** it records the workflow run as failed or blocked with a visible reason

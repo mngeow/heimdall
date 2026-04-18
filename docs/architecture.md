@@ -2,10 +2,11 @@
 
 ## Runtime Overview
 
-Heimdall should be a single Go binary with three long-running responsibilities:
+Heimdall should be a single Go binary with four long-running responsibilities:
 
 - a background poller that watches Linear for state transitions
 - a background poller that watches GitHub for new PR comments and relevant PR state changes
+- a background PR-command worker that dequeues and executes queued PR-comment jobs
 - an HTTP server for health, readiness, and any private operator endpoints
 
 The two pollers feed a shared workflow engine backed by a persistent store, while the HTTP server exposes health, readiness, and a private read-only operator dashboard.
@@ -18,6 +19,7 @@ flowchart TB
     subgraph Heimdall["Heimdall"]
         Poller["Linear Poller"]
         GitHubPoller["GitHub Poller"]
+        PRCommandWorker["PR-Command Worker<br/>dequeue + execute"]
         HTTPServer["HTTP Server<br/>health + readiness + dashboard"]
         CommandDispatcher["Command Dispatcher"]
         WorkflowEngine["Workflow Engine"]
@@ -28,6 +30,8 @@ flowchart TB
 
         Poller --> WorkflowEngine
         GitHubPoller --> CommandDispatcher --> WorkflowEngine
+        CommandDispatcher --> SQLite
+        PRCommandWorker --> SQLite
         WorkflowEngine --> RepoManager
         WorkflowEngine --> Executors
         WorkflowEngine --> SQLite

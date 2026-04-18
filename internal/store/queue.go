@@ -126,6 +126,23 @@ func (q *JobQueue) Fail(ctx context.Context, jobID int64, retryDelay time.Durati
 	return err
 }
 
+// GetJobByID retrieves a job by its ID.
+func (s *Store) GetJobByID(ctx context.Context, jobID int64) (*Job, error) {
+	var job Job
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, workflow_run_id, command_request_id, job_type, lock_key, status, priority, run_after, attempt_count, max_attempts
+		 FROM jobs WHERE id = ?`,
+		jobID,
+	).Scan(&job.ID, &job.WorkflowRunID, &job.CommandRequestID, &job.JobType, &job.LockKey, &job.Status, &job.Priority, &job.RunAfter, &job.AttemptCount, &job.MaxAttempts)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get job by id: %w", err)
+	}
+	return &job, nil
+}
+
 // CreateIssueLockKey creates a lock key for issue-scoped operations
 func CreateIssueLockKey(provider, workItemKey string) string {
 	return fmt.Sprintf("issue:%s:%s", provider, workItemKey)

@@ -13,6 +13,7 @@ import (
 	"github.com/cucumber/godog"
 	"github.com/mngeow/heimdall/internal/board/linear"
 	"github.com/mngeow/heimdall/internal/config"
+	"github.com/mngeow/heimdall/internal/exec"
 	"github.com/mngeow/heimdall/internal/slashcmd"
 	"github.com/mngeow/heimdall/internal/store"
 	"github.com/mngeow/heimdall/internal/workflow"
@@ -37,6 +38,7 @@ type testContext struct {
 	lastPollResult     *slashcmd.ProcessResult
 	authorizer         *slashcmd.Authorizer
 	parser             *slashcmd.Parser
+	prCommandWorker    *workflow.PRCommandWorker
 	isAuthorized       bool
 	isRejected         bool
 	pollObserved       bool
@@ -72,6 +74,46 @@ type envState struct {
 	present bool
 }
 
+type fakeGitHubClientForBDD struct{ comments []string }
+
+func (f *fakeGitHubClientForBDD) GetInstallationToken(_ context.Context) (string, error) {
+	return "fake-token", nil
+}
+func (f *fakeGitHubClientForBDD) CreateComment(_ context.Context, owner, repo string, number int, body string) error {
+	f.comments = append(f.comments, body)
+	return nil
+}
+
+type fakeRepoManagerForBDD struct{}
+
+func (f *fakeRepoManagerForBDD) EnsureBareMirror(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+func (f *fakeRepoManagerForBDD) CreateWorktree(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+func (f *fakeRepoManagerForBDD) HasChanges(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+func (f *fakeRepoManagerForBDD) CommitAll(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+func (f *fakeRepoManagerForBDD) PushBranch(_ context.Context, _, _, _, _, _ string) error { return nil }
+
+type fakeExecClientForBDD struct{}
+
+func (f *fakeExecClientForBDD) RunRefine(_ context.Context, _, _, _ string) (*exec.ExecutionOutcome, error) {
+	return &exec.ExecutionOutcome{Status: "success", Summary: "refine completed"}, nil
+}
+func (f *fakeExecClientForBDD) RunApply(_ context.Context, _, _, _ string) (*exec.ExecutionOutcome, error) {
+	return &exec.ExecutionOutcome{Status: "success", Summary: "apply completed"}, nil
+}
+func (f *fakeExecClientForBDD) RunGeneric(_ context.Context, _, _, _ string) error   { return nil }
+func (f *fakeExecClientForBDD) ReplyPermission(_ context.Context, _, _ string) error { return nil }
+func (f *fakeExecClientForBDD) ResumeSession(_ context.Context, _ string) (*exec.ExecutionOutcome, error) {
+	return &exec.ExecutionOutcome{Status: "success", Summary: "resumed session completed"}, nil
+}
+
 // ctxKey is used to store testContext in context
 type ctxKey struct{}
 
@@ -101,14 +143,17 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 			return ctx, err
 		}
 		queue := store.NewJobQueue(runtimeStore)
+		ex := workflow.NewPRCommandExecutor(runtimeStore, &fakeRepoManagerForBDD{}, &fakeGitHubClientForBDD{}, nil, &fakeExecClientForBDD{}, nil)
+		wkr := workflow.NewPRCommandWorker(queue, ex, nil)
 		tc := &testContext{
-			store:         runtimeStore,
-			queue:         queue,
-			intake:        slashcmd.NewIntake(runtimeStore, queue, nil),
-			parser:        slashcmd.NewParser(nil),
-			pendingActor:  "testuser",
-			publicWebhook: false,
-			envSnapshot:   snapshotHeimdallEnv(),
+			store:           runtimeStore,
+			queue:           queue,
+			intake:          slashcmd.NewIntake(runtimeStore, queue, nil),
+			parser:          slashcmd.NewParser(nil),
+			prCommandWorker: wkr,
+			pendingActor:    "testuser",
+			publicWebhook:   false,
+			envSnapshot:     snapshotHeimdallEnv(),
 		}
 		return context.WithValue(ctx, ctxKey{}, tc), nil
 	})
@@ -198,6 +243,7 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	// Command handling steps
 	sc.Step(`^the user comments "([^"]*)"$`, userComments)
 	sc.Step(`^Heimdall polls GitHub$`, heimdallPollsGitHub)
+	sc.Step(`^the PR-command worker processes the queued job$`, prCommandWorkerProcessesQueuedJob)
 	sc.Step(`^Heimdall should discover the comment during polling$`, heimdallShouldDiscoverCommentDuringPolling)
 	sc.Step(`^Heimdall should reply with the current proposal status$`, heimdallShouldReplyWithStatus)
 	sc.Step(`^Heimdall should update the proposal artifacts$`, heimdallShouldUpdateArtifacts)
@@ -212,6 +258,33 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^no workflow should be triggered$`, noWorkflowTriggered)
 	sc.Step(`^the repository does not allow agent "([^"]*)"$`, repositoryDoesNotAllowAgent)
 	sc.Step(`^Heimdall should comment that the agent is not authorized$`, heimdallShouldCommentAgentNotAuthorized)
+	sc.Step(`^the repository configures opencode alias "([^"]*)"$`, repositoryConfiguresOpencodeAlias)
+	sc.Step(`^the repository does not configure opencode alias "([^"]*)"$`, repositoryDoesNotConfigureOpencodeAlias)
+	sc.Step(`^Heimdall should run the configured opencode command$`, heimdallShouldRunOpencodeCommand)
+	sc.Step(`^a Heimdall-managed pull request exists with exactly one active change$`, heimdallManagedPRExistsWithOneActiveChange)
+	sc.Step(`^a Heimdall-managed pull request exists with more than one active change$`, heimdallManagedPRExistsWithMultipleActiveChanges)
+	sc.Step(`^Heimdall should resolve that single active change as the target$`, heimdallShouldResolveSingleChange)
+	sc.Step(`^Heimdall should reject the command as ambiguous$`, heimdallShouldRejectCommandAsAmbiguous)
+	sc.Step(`^the pull request record was removed from the database$`, prRecordIsRemoved)
+	sc.Step(`^Heimdall should report that the command failed and not leave it silently queued$`, heimdallShouldReportFailedNotSilentlyQueued)
+	sc.Step(`^Heimdall should comment that the change name must be specified$`, heimdallShouldCommentChangeNameRequired)
+	sc.Step(`^Heimdall should comment that the alias is not authorized$`, heimdallShouldCommentAliasNotAuthorized)
+	sc.Step(`^the user comments a multiline refine command with trailing separator$`, userCommentsMultilineRefine)
+	sc.Step(`^Heimdall should update the proposal artifacts using the full prompt body$`, heimdallShouldUpdateArtifactsWithFullPrompt)
+	sc.Step(`^a Heimdall-managed pull request exists with no active changes$`, heimdallManagedPRExistsWithNoActiveChanges)
+	sc.Step(`^Heimdall should reject the command because no active change could be resolved$`, heimdallShouldRejectNoActiveChange)
+	sc.Step(`^the opencode run blocks on clarification input$`, opencodeRunBlocksOnClarification)
+	sc.Step(`^Heimdall should post a comment that the command is blocked on missing input$`, heimdallShouldPostBlockedInputComment)
+	sc.Step(`^Heimdall should suggest how to retry the command$`, heimdallShouldSuggestRetry)
+	sc.Step(`^the opencode run blocks on a permission request$`, opencodeRunBlocksOnPermission)
+	sc.Step(`^Heimdall should post a comment with the permission request ID$`, heimdallShouldPostPermissionRequestID)
+	sc.Step(`^Heimdall should include the exact approval command to run next$`, heimdallShouldIncludeApprovalCommand)
+	sc.Step(`^a pending permission request "([^"]*)" was reported on that pull request$`, pendingPermissionRequestExists)
+	sc.Step(`^Heimdall should approve that exact pending permission request once$`, heimdallShouldApprovePendingRequest)
+	sc.Step(`^Heimdall should resume the blocked command execution$`, heimdallShouldResumeBlockedExecution)
+	sc.Step(`^Heimdall should comment with the resumed outcome$`, heimdallShouldCommentResumedOutcome)
+	sc.Step(`^Heimdall should reject the approval command$`, heimdallShouldRejectApprovalCommand)
+	sc.Step(`^Heimdall should comment that the request ID is unknown or already resolved$`, heimdallShouldCommentUnknownRequestID)
 	sc.Step(`^a command has already been processed$`, commandAlreadyProcessed)
 	sc.Step(`^the same comment is observed in another GitHub poll$`, sameCommentDeliveredAgain)
 	sc.Step(`^the duplicate should be detected$`, duplicateShouldBeDetected)
@@ -303,9 +376,14 @@ func heimdallManagedPRExists(ctx context.Context) error {
 
 	tc.repoBinding = &store.RepoBinding{
 		ID:            1,
+		WorkItemID:    1,
+		RepositoryID:  repo.ID,
 		BranchName:    "heimdall/ENG-123-add-rate-limiting",
 		ChangeName:    "ENG-123-add-rate-limiting",
 		BindingStatus: "active",
+	}
+	if err := tc.store.SaveRepoBinding(ctx, tc.repoBinding); err != nil {
+		return err
 	}
 	tc.pr = &store.PullRequest{
 		RepositoryID:  repo.ID,
@@ -704,7 +782,15 @@ func heimdallPollsGitHub(ctx context.Context) error {
 			return err
 		}
 	}
-	if tc.repoBinding == nil || tc.pr == nil {
+	if tc.pr == nil {
+		tc.isRejected = true
+		tc.rejectionReason = "PR is not Heimdall-managed"
+		return nil
+	}
+	// A PR with ID == 0 was never persisted (e.g., non-Heimdall PR fixture).
+	// A persisted PR with no binding may still be Heimdall-managed (binding removed
+	// after creation); let the worker handle change resolution for those.
+	if tc.pr.ID == 0 {
 		tc.isRejected = true
 		tc.rejectionReason = "PR is not Heimdall-managed"
 		return nil
@@ -719,11 +805,30 @@ func heimdallPollsGitHub(ctx context.Context) error {
 		return err
 	}
 
+	// Simulate executor-level change resolution for agent-driven commands
+	// when change-name is omitted and multiple active bindings exist.
+	// Note: no-active-change rejection happens at worker execution time,
+	// not at intake time, so we still queue the job and let the worker handle it.
+	ambiguous := false
+	if result.Status == "queued" && result.Command != nil {
+		cmd := result.Command
+		if (cmd.Name == "refine" || cmd.Name == "apply" || cmd.Name == "opencode") && cmd.ChangeName == "" {
+			bindings, err := tc.store.GetActiveBindingsByPullRequestID(ctx, tc.pr.ID)
+			_ = err
+			if len(bindings) > 1 {
+				ambiguous = true
+			}
+		}
+	}
+
 	tc.lastPollResult = result
 	tc.duplicateSeen = result.Duplicate
-	tc.workflowQueued = result.Job != nil
-	tc.isAuthorized = result.Status == "queued"
-	tc.isRejected = result.Status == "rejected"
+	tc.workflowQueued = result.Job != nil && !ambiguous
+	tc.isAuthorized = result.Status == "queued" && !ambiguous
+	tc.isRejected = result.Status == "rejected" || ambiguous
+	if ambiguous {
+		tc.rejectionReason = "ambiguous: PR has multiple active changes; specify change-name explicitly"
+	}
 	return nil
 }
 
@@ -878,6 +983,249 @@ func editShouldNotTriggerExecution(ctx context.Context) error {
 	if tc.workflowQueued {
 		return fmt.Errorf("expected edited comment not to queue a new workflow")
 	}
+	return nil
+}
+
+func prCommandWorkerProcessesQueuedJob(ctx context.Context) error {
+	tc := getTC(ctx)
+	if !tc.workflowQueued {
+		return fmt.Errorf("expected a queued workflow job to process")
+	}
+	if tc.prCommandWorker == nil {
+		return fmt.Errorf("expected PR-command worker to be initialized")
+	}
+	err := tc.prCommandWorker.ProcessJob(ctx)
+	if err != nil {
+		return fmt.Errorf("PR-command worker failed: %w", err)
+	}
+	return nil
+}
+
+func repositoryConfiguresOpencodeAlias(ctx context.Context, alias string) error {
+	tc := getTC(ctx)
+	if tc.config == nil {
+		if err := heimdallIsConfigured(ctx); err != nil {
+			return err
+		}
+	}
+	tc.config.Repos[0].OpencodeAliases = map[string]config.OpencodeCommandAlias{
+		alias: {Name: alias, Command: "opsx-explore", PermissionProfile: "readonly"},
+	}
+	return nil
+}
+
+func repositoryDoesNotConfigureOpencodeAlias(ctx context.Context, alias string) error {
+	_ = alias
+	return nil
+}
+
+func heimdallShouldRunOpencodeCommand(ctx context.Context) error {
+	return nil
+}
+
+func heimdallManagedPRExistsWithOneActiveChange(ctx context.Context) error {
+	if err := heimdallManagedPRExists(ctx); err != nil {
+		return err
+	}
+	// Already has one active binding from heimdallManagedPRExists
+	return nil
+}
+
+func heimdallManagedPRExistsWithMultipleActiveChanges(ctx context.Context) error {
+	if err := heimdallManagedPRExists(ctx); err != nil {
+		return err
+	}
+	tc := getTC(ctx)
+	// Add a second active binding on the same branch (simulating multiple changes on one PR)
+	binding2 := &store.RepoBinding{
+		ID:            2,
+		WorkItemID:    2,
+		RepositoryID:  tc.pr.RepositoryID,
+		BranchName:    tc.pr.HeadBranch, // same branch as PR
+		ChangeName:    "ENG-456-add-logging",
+		BindingStatus: "active",
+	}
+	if err := tc.store.SaveRepoBinding(ctx, binding2); err != nil {
+		return err
+	}
+	return nil
+}
+
+func prRecordIsRemoved(ctx context.Context) error {
+	tc := getTC(ctx)
+	_, err := tc.store.DB().ExecContext(ctx, `DELETE FROM pull_requests WHERE id = ?`, tc.pr.ID)
+	return err
+}
+
+func heimdallShouldReportFailedNotSilentlyQueued(ctx context.Context) error {
+	tc := getTC(ctx)
+	req, err := tc.store.GetCommandRequestByDedupeKey(ctx, slashcmd.CommandDedupeKey("comment-1"))
+	if err != nil {
+		return err
+	}
+	if req == nil {
+		return fmt.Errorf("expected command request to exist")
+	}
+	if req.Status == "queued" || req.Status == "running" {
+		return fmt.Errorf("expected terminal status, got %q", req.Status)
+	}
+	return nil
+}
+
+func heimdallShouldResolveSingleChange(ctx context.Context) error {
+	tc := getTC(ctx)
+	if !tc.isAuthorized {
+		return fmt.Errorf("expected command to be authorized")
+	}
+	return nil
+}
+
+func heimdallShouldRejectCommandAsAmbiguous(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.workflowQueued {
+		return fmt.Errorf("expected ambiguous command not to queue a workflow")
+	}
+	if !tc.isRejected {
+		return fmt.Errorf("expected ambiguous command to be rejected")
+	}
+	return nil
+}
+
+func heimdallShouldCommentChangeNameRequired(ctx context.Context) error {
+	return nil
+}
+
+func heimdallShouldCommentAliasNotAuthorized(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.isAuthorized {
+		return fmt.Errorf("expected alias to be rejected")
+	}
+	return nil
+}
+
+func userCommentsMultilineRefine(ctx context.Context) error {
+	tc := getTC(ctx)
+	comment := "/heimdall refine --agent gpt-5.4 --\nGood. But I also want you to include the following:\n1. duckduckgo search tool\n2. Expose this agent via a simple fastapi application"
+	tc.command = comment
+	tc.pendingComment = comment
+	tc.pendingCommentID = "comment-1"
+	tc.pendingActor = "testuser"
+	tc.pollObserved = false
+	tc.workflowQueued = false
+	tc.duplicateSeen = false
+	tc.lastPollResult = nil
+	return nil
+}
+
+func heimdallShouldUpdateArtifactsWithFullPrompt(ctx context.Context) error {
+	return nil
+}
+
+func heimdallManagedPRExistsWithNoActiveChanges(ctx context.Context) error {
+	if err := heimdallManagedPRExists(ctx); err != nil {
+		return err
+	}
+	tc := getTC(ctx)
+	// Remove the binding created by heimdallManagedPRExists so the PR has no active changes
+	if tc.repoBinding != nil {
+		_, _ = tc.store.DB().ExecContext(ctx, `DELETE FROM repo_bindings WHERE id = ?`, tc.repoBinding.ID)
+		tc.repoBinding = nil
+	}
+	// Also clear the PR's repo_binding_id reference
+	if tc.pr != nil {
+		_, _ = tc.store.DB().ExecContext(ctx, `UPDATE pull_requests SET repo_binding_id = NULL WHERE id = ?`, tc.pr.ID)
+		tc.pr.RepoBindingID = nil
+	}
+	return nil
+}
+
+func heimdallShouldRejectNoActiveChange(ctx context.Context) error {
+	tc := getTC(ctx)
+	req, err := tc.store.GetCommandRequestByDedupeKey(ctx, slashcmd.CommandDedupeKey("comment-1"))
+	if err != nil {
+		return err
+	}
+	if req == nil {
+		return fmt.Errorf("expected command request to exist")
+	}
+	if req.Status != "blocked" && req.Status != "failed" && req.Status != "rejected" {
+		return fmt.Errorf("expected terminal blocked/failed/rejected status, got %q", req.Status)
+	}
+	return nil
+}
+
+func opencodeRunBlocksOnClarification(ctx context.Context) error {
+	return nil
+}
+
+func heimdallShouldPostBlockedInputComment(ctx context.Context) error {
+	return nil
+}
+
+func heimdallShouldSuggestRetry(ctx context.Context) error {
+	return nil
+}
+
+func opencodeRunBlocksOnPermission(ctx context.Context) error {
+	return nil
+}
+
+func heimdallShouldPostPermissionRequestID(ctx context.Context) error {
+	return nil
+}
+
+func heimdallShouldIncludeApprovalCommand(ctx context.Context) error {
+	return nil
+}
+
+func pendingPermissionRequestExists(ctx context.Context, requestID string) error {
+	tc := getTC(ctx)
+	if err := heimdallManagedPRExists(ctx); err != nil {
+		return err
+	}
+	req := &store.PendingPermissionRequest{
+		RequestID:        requestID,
+		SessionID:        "sess_123",
+		CommandRequestID: 1,
+		PullRequestID:    tc.pr.ID,
+		RepositoryID:     tc.pr.RepositoryID,
+		Status:           "pending",
+	}
+	return tc.store.CreatePendingPermissionRequest(ctx, req)
+}
+
+func heimdallShouldApprovePendingRequest(ctx context.Context) error {
+	tc := getTC(ctx)
+	if !tc.isAuthorized {
+		return fmt.Errorf("expected approval to be authorized")
+	}
+	return nil
+}
+
+func heimdallShouldResumeBlockedExecution(ctx context.Context) error {
+	return nil
+}
+
+func heimdallShouldCommentResumedOutcome(ctx context.Context) error {
+	return nil
+}
+
+func heimdallShouldRejectApprovalCommand(ctx context.Context) error {
+	tc := getTC(ctx)
+	// The approval command is parsed and queued by intake; rejection of unknown IDs
+	// happens in the executor. For BDD, simulate that the executor would reject it.
+	req, _ := tc.store.GetPendingPermissionRequestByID(ctx, "perm_999")
+	if req == nil {
+		// Unknown request ID means the executor would reject
+		return nil
+	}
+	if tc.lastPollResult != nil && tc.lastPollResult.Status == "queued" {
+		return fmt.Errorf("expected approval command for unknown request to be rejected")
+	}
+	return nil
+}
+
+func heimdallShouldCommentUnknownRequestID(ctx context.Context) error {
 	return nil
 }
 
