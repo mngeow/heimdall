@@ -105,12 +105,13 @@ func (w *PRCommandWorker) executeJob(ctx context.Context, job *store.Job) error 
 	}
 
 	execReq := ExecutionRequest{
-		Kind:       req.CommandName,
-		ChangeName: req.ChangeName,
-		Agent:      req.RequestedAgent,
-		PromptTail: req.PromptTail,
-		Alias:      req.Alias,
-		RequestID:  req.RequestID,
+		Kind:             req.CommandName,
+		ChangeName:       req.ChangeName,
+		Agent:            req.RequestedAgent,
+		PromptTail:       req.PromptTail,
+		Alias:            req.Alias,
+		RequestID:        req.RequestID,
+		CommandRequestID: req.ID,
 	}
 
 	var execErr error

@@ -121,9 +121,11 @@ Processing steps:
 9. The worker asks OpenSpec for apply instructions in the prepared worktree.
 10. If the change is blocked, the worker comments back with the reason instead of guessing.
 11. The worker runs the apply executor with the selected agent in the same prepared worktree.
-12. The worker commits task-file updates and code changes together.
-13. The worker pushes the branch.
-14. The worker comments back with completed tasks, remaining tasks, or blockers.
+12. The worker captures the opencode `sessionID` from the first structured event and persists it with the command request for later retries and debugging.
+13. The worker classifies the terminal outcome from the final session evidence rather than from the first intermediate generic error event, and ensures true failures always surface a non-empty summary instead of a blank message.
+14. The worker commits task-file updates and code changes together.
+15. The worker pushes the branch.
+16. The worker comments back with completed tasks, remaining tasks, or blockers.
 
 ## Workflow 4: Archive From A PR Comment
 

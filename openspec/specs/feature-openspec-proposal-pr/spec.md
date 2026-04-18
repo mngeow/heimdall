@@ -22,17 +22,22 @@ Heimdall MUST extract the activated work item's title and description and MUST u
 Heimdall MUST create or reuse a deterministic OpenSpec change in the repository worktree before generating activation proposal artifacts, and MUST use OpenSpec CLI status and instruction output to determine which artifacts are required for implementation readiness.
 
 #### Scenario: Heimdall prepares proposal generation for an activated issue
-- **WHEN** Heimdall prepares the activation-triggered proposal workflow for work item `ENG-123`
-- **THEN** it creates or reuses the OpenSpec change `eng-123-add-rate-limiting`
+- **WHEN** Heimdall prepares the activation-triggered proposal workflow for work item `ENG-123` whose title normalizes to `add-rate-limiting`
+- **THEN** it creates or reuses the OpenSpec change `add-rate-limiting`
 - **AND** it reads OpenSpec CLI status and artifact instructions before generating the change artifacts
 
 ### Requirement: Activation proposal uses deterministic change names
-Heimdall MUST derive a deterministic OpenSpec change name from the activated work item's key and normalized slug so retries and later pull request commands target the same change.
+Heimdall MUST derive a deterministic OpenSpec change name from the activated work item's title by normalizing it into a kebab-case slug. The normalization MUST lowercase letters, convert spaces to hyphens, collapse repeated whitespace or separator runs into a single hyphen, trim leading and trailing hyphens, and strip unsupported punctuation so retries and later pull request commands target the same change.
 
-#### Scenario: Heimdall creates a change name for an activated work item
-- **WHEN** Heimdall prepares a change name for work item `ENG-123` whose title yields slug `add-rate-limiting`
-- **THEN** it names the change `eng-123-add-rate-limiting`
+#### Scenario: Heimdall creates a change name from a spaced Linear title
+- **WHEN** Heimdall prepares a change name for work item `ENG-123` with title `Add   Rate Limiting`
+- **THEN** it names the change `add-rate-limiting`
 - **AND** it reuses that same change identity on later retries for the same work item and repository
+
+#### Scenario: Heimdall strips punctuation while normalizing the title
+- **WHEN** Heimdall prepares a change name for work item `ENG-123` with title `Feature: add rate limiting, please`
+- **THEN** it names the change `feature-add-rate-limiting-please`
+- **AND** it does not preserve spaces or punctuation in the canonical OpenSpec change name
 
 ### Requirement: Activation proposal artifacts are committed, pushed, and opened as a pull request
 Heimdall MUST commit the activation-triggered OpenSpec proposal artifacts to the branch, push the branch to GitHub, and open or reuse a pull request against the configured base branch.

@@ -30,6 +30,7 @@ type ExecutionRequest struct {
 	PermissionProfile string
 	WorktreePath      string
 	RequestID         string
+	CommandRequestID  int64
 }
 
 type prCommandRepoManager interface {
@@ -182,6 +183,15 @@ func (e *PRCommandExecutor) ExecuteRefine(ctx context.Context, req ExecutionRequ
 		return fmt.Errorf("refine failed: %w", err)
 	}
 
+	// Persist the observed session identity for later retries and debugging.
+	if outcome.SessionID != "" && req.CommandRequestID != 0 {
+		if r, err := e.store.GetCommandRequestByID(ctx, req.CommandRequestID); err == nil && r != nil {
+			r.SessionID = outcome.SessionID
+			_ = e.store.SaveCommandRequest(ctx, r)
+		}
+		logger = logger.With("session_id", outcome.SessionID)
+	}
+
 	switch outcome.Status {
 	case "success":
 		return e.commitAndPushOutcome(ctx, pr, repo, "refine", changeName, req.Agent, outcome)
@@ -190,7 +200,11 @@ func (e *PRCommandExecutor) ExecuteRefine(ctx context.Context, req ExecutionRequ
 	case "needs_permission":
 		return e.handleBlockedPermission(ctx, req, pr, repo, outcome)
 	default:
-		return fmt.Errorf("refine failed: %s", outcome.Summary)
+		summary := outcome.Summary
+		if summary == "" {
+			summary = "refine execution failed without a detailed error message"
+		}
+		return fmt.Errorf("refine failed: %s", summary)
 	}
 }
 
@@ -220,6 +234,15 @@ func (e *PRCommandExecutor) ExecuteApply(ctx context.Context, req ExecutionReque
 		return fmt.Errorf("apply failed: %w", err)
 	}
 
+	// Persist the observed session identity for later retries and debugging.
+	if outcome.SessionID != "" && req.CommandRequestID != 0 {
+		if r, err := e.store.GetCommandRequestByID(ctx, req.CommandRequestID); err == nil && r != nil {
+			r.SessionID = outcome.SessionID
+			_ = e.store.SaveCommandRequest(ctx, r)
+		}
+		logger = logger.With("session_id", outcome.SessionID)
+	}
+
 	switch outcome.Status {
 	case "success":
 		return e.commitAndPushOutcome(ctx, pr, repo, "apply", changeName, req.Agent, outcome)
@@ -228,7 +251,11 @@ func (e *PRCommandExecutor) ExecuteApply(ctx context.Context, req ExecutionReque
 	case "needs_permission":
 		return e.handleBlockedPermission(ctx, req, pr, repo, outcome)
 	default:
-		return fmt.Errorf("apply failed: %s", outcome.Summary)
+		summary := outcome.Summary
+		if summary == "" {
+			summary = "apply execution failed without a detailed error message"
+		}
+		return fmt.Errorf("apply failed: %s", summary)
 	}
 }
 
@@ -330,10 +357,17 @@ func (e *PRCommandExecutor) handleBlockedPermission(ctx context.Context, req Exe
 	if outcome.RequestID == "" || outcome.SessionID == "" {
 		return fmt.Errorf("blocked on permission but missing request or session ID; cannot create approval command")
 	}
+	// Reuse the stored session ID from the originating command request if available.
+	sessionID := outcome.SessionID
+	if req.CommandRequestID != 0 {
+		if r, err := e.store.GetCommandRequestByID(ctx, req.CommandRequestID); err == nil && r != nil && r.SessionID != "" {
+			sessionID = r.SessionID
+		}
+	}
 	permReq := &store.PendingPermissionRequest{
 		RequestID:        outcome.RequestID,
-		SessionID:        outcome.SessionID,
-		CommandRequestID: 0,
+		SessionID:        sessionID,
+		CommandRequestID: req.CommandRequestID,
 		PullRequestID:    pr.ID,
 		RepositoryID:     repo.ID,
 		Status:           "pending",

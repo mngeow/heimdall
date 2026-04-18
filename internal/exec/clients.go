@@ -373,26 +373,28 @@ func (c *OpenCodeClient) runWithJSONEvents(ctx context.Context, agent, message s
 		return nil, fmt.Errorf("failed to start opencode: %w", err)
 	}
 
-	outcome, parseErr := parseOpencodeEvents(stdout)
+	res, parseErr := parseOpencodeEvents(stdout)
 
 	waitErr := cmd.Wait()
-	if waitErr != nil && parseErr == nil {
-		// Process exited with error but we didn't detect a structured blocker.
-		// Treat as generic execution failure.
-		return &ExecutionOutcome{Status: "error", Summary: fmt.Sprintf("opencode exited with error: %v", waitErr)}, nil
-	}
 	if parseErr != nil {
 		return nil, parseErr
 	}
-	if outcome == nil {
-		return &ExecutionOutcome{Status: "success", Summary: "completed"}, nil
-	}
-	return outcome, nil
+
+	return resolveOutcome(res, waitErr), nil
 }
 
-func parseOpencodeEvents(r io.Reader) (*ExecutionOutcome, error) {
+// opencodeParseResult holds the accumulated state from reading an NDJSON event stream.
+type opencodeParseResult struct {
+	SessionID string
+	Blocker   *ExecutionOutcome // immediate blocker: permission, input
+	LastError string            // last observed generic error text (may be intermediate)
+	HasError  bool              // whether any generic error event was seen
+	Terminal  *ExecutionOutcome // terminal outcome if one was explicitly found
+}
+
+func parseOpencodeEvents(r io.Reader) (*opencodeParseResult, error) {
 	reader := bufio.NewReader(r)
-	var sessionID string
+	res := &opencodeParseResult{}
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
@@ -414,12 +416,12 @@ func parseOpencodeEvents(r io.Reader) (*ExecutionOutcome, error) {
 				break
 			}
 			if ev.SessionID != "" {
-				sessionID = ev.SessionID
+				res.SessionID = ev.SessionID
 			}
 			if ev.Type == "step_start" && ev.Part.SessionID != "" {
-				sessionID = ev.Part.SessionID
+				res.SessionID = ev.Part.SessionID
 			}
-			// Detect permission.asked events
+			// Detect permission.asked events — immediate blocker
 			if ev.Type == "permission.asked" || (ev.Type == "tool_use" && ev.Part.Tool == "permission" && ev.Part.State.Status == "pending") {
 				reqID := ev.Properties.ID
 				if reqID == "" {
@@ -427,26 +429,31 @@ func parseOpencodeEvents(r io.Reader) (*ExecutionOutcome, error) {
 				}
 				sid := ev.Properties.SessionID
 				if sid == "" {
-					sid = sessionID
+					sid = res.SessionID
 				}
 				if reqID == "" || sid == "" {
-					// Real permission event but missing required identifiers.
-					return &ExecutionOutcome{Status: "error", Summary: "permission request detected but missing request or session ID"}, nil
+					res.Terminal = &ExecutionOutcome{Status: "error", Summary: "permission request detected but missing request or session ID"}
+					return res, nil
 				}
-				return &ExecutionOutcome{Status: "needs_permission", Summary: "blocked on permission request", RequestID: reqID, SessionID: sid}, nil
+				res.Blocker = &ExecutionOutcome{Status: "needs_permission", Summary: "blocked on permission request", RequestID: reqID, SessionID: sid}
+				return res, nil
 			}
-			// Detect blocked input / question events
+			// Detect blocked input / question events — immediate blocker
 			if ev.Type == "question.asked" || ev.Type == "input.requested" {
-				return &ExecutionOutcome{Status: "needs_input", Summary: "blocked on clarification input"}, nil
+				res.Blocker = &ExecutionOutcome{Status: "needs_input", Summary: "blocked on clarification input"}
+				return res, nil
 			}
-			// Detect tool_use errors that indicate execution failure
+			// Track generic tool_use errors as intermediate context, not terminal.
 			if ev.Type == "tool_use" && ev.Part.State.Status == "error" {
-				return &ExecutionOutcome{Status: "error", Summary: ev.Part.State.Output}, nil
+				res.HasError = true
+				if ev.Part.State.Output != "" {
+					res.LastError = ev.Part.State.Output
+				}
+				continue
 			}
-			// Detect step_finish with error reason
+			// Detect explicit terminal success from step_finish or similar completion events.
 			if ev.Type == "step_finish" {
-				// step_finish doesn't carry error details in the minimal shape;
-				// rely on tool_use error above or final process exit code.
+				res.Terminal = &ExecutionOutcome{Status: "success", Summary: "completed"}
 			}
 		}
 		if err != nil {
@@ -456,7 +463,35 @@ func parseOpencodeEvents(r io.Reader) (*ExecutionOutcome, error) {
 			return nil, fmt.Errorf("failed reading opencode output: %w", err)
 		}
 	}
-	return nil, nil
+	return res, nil
+}
+
+// resolveOutcome reconciles a parse result with the process exit state to produce
+// the final ExecutionOutcome. It guarantees a non-empty Summary for true failures.
+func resolveOutcome(res *opencodeParseResult, waitErr error) *ExecutionOutcome {
+	if res == nil {
+		res = &opencodeParseResult{}
+	}
+	// Blockers are terminal regardless of later events or exit code.
+	if res.Blocker != nil {
+		return res.Blocker
+	}
+	// Terminal success from explicit completion event.
+	if res.Terminal != nil {
+		return res.Terminal
+	}
+	// Process exited with error and no terminal success was observed.
+	if waitErr != nil {
+		summary := "opencode exited with error"
+		if res.LastError != "" {
+			summary = res.LastError
+		} else if waitErr.Error() != "" {
+			summary = fmt.Sprintf("opencode exited with error: %v", waitErr)
+		}
+		return &ExecutionOutcome{Status: "error", Summary: summary, SessionID: res.SessionID}
+	}
+	// No explicit terminal event but process succeeded — default to success.
+	return &ExecutionOutcome{Status: "success", Summary: "completed", SessionID: res.SessionID}
 }
 
 // RunGeneric runs a non-interactive generic opencode command alias and classifies the outcome.
