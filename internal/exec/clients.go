@@ -244,6 +244,11 @@ func NewOpenCodeClient(worktreePath string) *OpenCodeClient {
 	return &OpenCodeClient{worktreePath: worktreePath}
 }
 
+// SetWorktreePath sets the worktree path for subsequent opencode commands.
+func (c *OpenCodeClient) SetWorktreePath(worktreePath string) {
+	c.worktreePath = worktreePath
+}
+
 // GenerateArtifact generates an artifact using opencode
 func (c *OpenCodeClient) GenerateArtifact(ctx context.Context, agent, instructions string) error {
 	cmd := exec.CommandContext(ctx, "opencode", "generate", "--agent", agent, "--instructions", instructions)
@@ -368,76 +373,125 @@ func (c *OpenCodeClient) runWithJSONEvents(ctx context.Context, agent, message s
 		return nil, fmt.Errorf("failed to start opencode: %w", err)
 	}
 
-	outcome, parseErr := parseOpencodeEvents(stdout)
+	res, parseErr := parseOpencodeEvents(stdout)
 
 	waitErr := cmd.Wait()
-	if waitErr != nil && parseErr == nil {
-		// Process exited with error but we didn't detect a structured blocker.
-		// Treat as generic execution failure.
-		return &ExecutionOutcome{Status: "error", Summary: fmt.Sprintf("opencode exited with error: %v", waitErr)}, nil
-	}
 	if parseErr != nil {
 		return nil, parseErr
 	}
-	if outcome == nil {
-		return &ExecutionOutcome{Status: "success", Summary: "completed"}, nil
-	}
-	return outcome, nil
+
+	return resolveOutcome(res, waitErr), nil
 }
 
-func parseOpencodeEvents(r io.Reader) (*ExecutionOutcome, error) {
-	scanner := bufio.NewScanner(r)
-	var sessionID string
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var ev opencodeEvent
-		if err := json.Unmarshal(line, &ev); err != nil {
-			// Non-JSON line; skip. Could be early log noise.
-			continue
-		}
-		if ev.SessionID != "" {
-			sessionID = ev.SessionID
-		}
-		if ev.Type == "step_start" && ev.Part.SessionID != "" {
-			sessionID = ev.Part.SessionID
-		}
-		// Detect permission.asked events
-		if ev.Type == "permission.asked" || (ev.Type == "tool_use" && ev.Part.Tool == "permission" && ev.Part.State.Status == "pending") {
-			reqID := ev.Properties.ID
-			if reqID == "" {
-				reqID = ev.Part.CallID
+// opencodeParseResult holds the accumulated state from reading an NDJSON event stream.
+type opencodeParseResult struct {
+	SessionID string
+	Blocker   *ExecutionOutcome // immediate blocker: permission, input
+	LastError string            // last observed generic error text (may be intermediate)
+	HasError  bool              // whether any generic error event was seen
+	Terminal  *ExecutionOutcome // terminal outcome if one was explicitly found
+}
+
+func parseOpencodeEvents(r io.Reader) (*opencodeParseResult, error) {
+	reader := bufio.NewReader(r)
+	res := &opencodeParseResult{}
+	for {
+		line, err := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			line = bytes.TrimSpace(line)
+			if len(line) == 0 {
+				if err == nil {
+					continue
+				}
+				// EOF with empty final line
+				break
 			}
-			sid := ev.Properties.SessionID
-			if sid == "" {
-				sid = sessionID
+			var ev opencodeEvent
+			if unmarshalErr := json.Unmarshal(line, &ev); unmarshalErr != nil {
+				// Non-JSON line; skip. Could be early log noise.
+				if err == nil {
+					continue
+				}
+				// EOF with non-JSON final line
+				break
 			}
-			if reqID == "" || sid == "" {
-				// Real permission event but missing required identifiers.
-				return &ExecutionOutcome{Status: "error", Summary: "permission request detected but missing request or session ID"}, nil
+			if ev.SessionID != "" {
+				res.SessionID = ev.SessionID
 			}
-			return &ExecutionOutcome{Status: "needs_permission", Summary: "blocked on permission request", RequestID: reqID, SessionID: sid}, nil
+			if ev.Type == "step_start" && ev.Part.SessionID != "" {
+				res.SessionID = ev.Part.SessionID
+			}
+			// Detect permission.asked events — immediate blocker
+			if ev.Type == "permission.asked" || (ev.Type == "tool_use" && ev.Part.Tool == "permission" && ev.Part.State.Status == "pending") {
+				reqID := ev.Properties.ID
+				if reqID == "" {
+					reqID = ev.Part.CallID
+				}
+				sid := ev.Properties.SessionID
+				if sid == "" {
+					sid = res.SessionID
+				}
+				if reqID == "" || sid == "" {
+					res.Terminal = &ExecutionOutcome{Status: "error", Summary: "permission request detected but missing request or session ID"}
+					return res, nil
+				}
+				res.Blocker = &ExecutionOutcome{Status: "needs_permission", Summary: "blocked on permission request", RequestID: reqID, SessionID: sid}
+				return res, nil
+			}
+			// Detect blocked input / question events — immediate blocker
+			if ev.Type == "question.asked" || ev.Type == "input.requested" {
+				res.Blocker = &ExecutionOutcome{Status: "needs_input", Summary: "blocked on clarification input"}
+				return res, nil
+			}
+			// Track generic tool_use errors as intermediate context, not terminal.
+			if ev.Type == "tool_use" && ev.Part.State.Status == "error" {
+				res.HasError = true
+				if ev.Part.State.Output != "" {
+					res.LastError = ev.Part.State.Output
+				}
+				continue
+			}
+			// Detect explicit terminal success from step_finish or similar completion events.
+			if ev.Type == "step_finish" {
+				res.Terminal = &ExecutionOutcome{Status: "success", Summary: "completed"}
+			}
 		}
-		// Detect blocked input / question events
-		if ev.Type == "question.asked" || ev.Type == "input.requested" {
-			return &ExecutionOutcome{Status: "needs_input", Summary: "blocked on clarification input"}, nil
-		}
-		// Detect tool_use errors that indicate execution failure
-		if ev.Type == "tool_use" && ev.Part.State.Status == "error" {
-			return &ExecutionOutcome{Status: "error", Summary: ev.Part.State.Output}, nil
-		}
-		// Detect step_finish with error reason
-		if ev.Type == "step_finish" {
-			// step_finish doesn't carry error details in the minimal shape;
-			// rely on tool_use error above or final process exit code.
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("failed reading opencode output: %w", err)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed reading opencode output: %w", err)
+	return res, nil
+}
+
+// resolveOutcome reconciles a parse result with the process exit state to produce
+// the final ExecutionOutcome. It guarantees a non-empty Summary for true failures.
+func resolveOutcome(res *opencodeParseResult, waitErr error) *ExecutionOutcome {
+	if res == nil {
+		res = &opencodeParseResult{}
 	}
-	return nil, nil
+	// Blockers are terminal regardless of later events or exit code.
+	if res.Blocker != nil {
+		return res.Blocker
+	}
+	// Terminal success from explicit completion event.
+	if res.Terminal != nil {
+		return res.Terminal
+	}
+	// Process exited with error and no terminal success was observed.
+	if waitErr != nil {
+		summary := "opencode exited with error"
+		if res.LastError != "" {
+			summary = res.LastError
+		} else if waitErr.Error() != "" {
+			summary = fmt.Sprintf("opencode exited with error: %v", waitErr)
+		}
+		return &ExecutionOutcome{Status: "error", Summary: summary, SessionID: res.SessionID}
+	}
+	// No explicit terminal event but process succeeded — default to success.
+	return &ExecutionOutcome{Status: "success", Summary: "completed", SessionID: res.SessionID}
 }
 
 // RunGeneric runs a non-interactive generic opencode command alias and classifies the outcome.
@@ -512,10 +566,12 @@ func buildProposalPrompt(req ProposalRequest) string {
 		description = "No issue description was provided."
 	}
 
+	changeName := normalizeChangeName(req.IssueTitle)
+
 	return fmt.Sprintf(`You are generating an OpenSpec change proposal for a Heimdall-activated work item.
 
 Work only inside this repository.
-Use the local openspec CLI to create a new change with an appropriate name based on the issue context.
+Use the local openspec CLI to create a new change named %q based on the issue context.
 Use openspec status and instructions to determine which artifacts are required.
 Generate all apply-required artifacts (proposal, design, specs, tasks) before stopping.
 Do not implement tasks; only create the proposal artifacts.
@@ -524,7 +580,26 @@ Issue key: %s
 Issue title: %s
 Issue description:
 %s
-`, req.IssueKey, req.IssueTitle, description)
+`, changeName, req.IssueKey, req.IssueTitle, description)
+}
+
+// normalizeChangeName converts a free-form title into a kebab-case OpenSpec change name.
+func normalizeChangeName(title string) string {
+	var result strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(title) {
+		isAlphaNum := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if isAlphaNum {
+			result.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash && result.Len() > 0 {
+			result.WriteRune('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(result.String(), "-")
 }
 
 func proposalSummary(req ProposalRequest) string {

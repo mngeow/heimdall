@@ -51,6 +51,8 @@ func (m *Manager) EnsureBareMirror(ctx context.Context, mirrorPath, owner, name,
 
 // CreateWorktree creates a new worktree for a workflow run.
 // It reconciles stale git worktree registrations that may exist from prior failed runs.
+// If the branch already exists in the mirror, the worktree is created from that branch ref
+// so existing PR/proposal branch content is preserved. Otherwise it falls back to baseBranch.
 func (m *Manager) CreateWorktree(ctx context.Context, mirrorPath, baseBranch, branchName, worktreePath string) error {
 	// Ensure worktree directory exists
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0755); err != nil {
@@ -64,14 +66,26 @@ func (m *Manager) CreateWorktree(ctx context.Context, mirrorPath, baseBranch, br
 		return fmt.Errorf("failed to reconcile stale worktree: %w", err)
 	}
 
-	// Create worktree
+	// Prefer the fetched branch ref when the branch already exists in the mirror.
+	// This preserves existing PR/proposal branch content instead of reseeding from default.
 	baseRef := fmt.Sprintf("refs/heads/%s", strings.TrimSpace(baseBranch))
+	branchRef := fmt.Sprintf("refs/heads/%s", strings.TrimSpace(branchName))
+	if branchExistsInMirror(ctx, mirrorPath, branchRef) {
+		baseRef = branchRef
+	}
+
 	cmd := exec.CommandContext(ctx, "git", "-C", mirrorPath, "worktree", "add", "-B", branchName, worktreePath, baseRef)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create worktree: %w (output: %s)", err, string(output))
 	}
 
 	return nil
+}
+
+// branchExistsInMirror checks whether a branch ref exists in the local bare mirror.
+func branchExistsInMirror(ctx context.Context, mirrorPath, branchRef string) bool {
+	cmd := exec.CommandContext(ctx, "git", "-C", mirrorPath, "show-ref", "--verify", "--quiet", branchRef)
+	return cmd.Run() == nil
 }
 
 // reconcileStaleWorktree removes stale git worktree registrations that would

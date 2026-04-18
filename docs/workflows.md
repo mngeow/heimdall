@@ -40,7 +40,7 @@ Detailed flow:
 1. Resolve the target repository.
 2. Reconcile whether a branch, change, or PR already exists for this issue.
 3. Create or reuse branch `heimdall/<issue-key>-<description-or-title-slug>`.
-4. Derive deterministic change name `<issue-key>-<description-or-title-slug>` (lowercased).
+4. Derive deterministic change name from the normalized Linear ticket title by lowercasing letters, converting spaces to hyphens, collapsing repeated separators, trimming leading and trailing hyphens, and stripping unsupported punctuation.
 5. Ensure the configured bare mirror exists at `HEIMDALL_REPO_<id>_LOCAL_MIRROR_PATH`.
 6. Create a worktree from that mirror for the proposal branch.
 7. Create or reuse the OpenSpec change through the local `openspec` CLI.
@@ -116,13 +116,16 @@ Processing steps:
 4. The worker loads the persisted command request, pull request, and repository.
 5. The worker authorizes the actor and parses the requested agent.
 6. The worker checks that the agent is allowed for that repository.
-7. The worker resolves the branch and worktree for the PR.
-8. The worker asks OpenSpec for apply instructions.
-9. If the change is blocked, the worker comments back with the reason instead of guessing.
-10. The worker runs the apply executor with the selected agent.
-11. The worker commits task-file updates and code changes together.
-12. The worker pushes the branch.
-13. The worker comments back with completed tasks, remaining tasks, or blockers.
+7. The worker resolves the branch and derives the canonical worktree path from the repository mirror and PR head branch.
+8. The worker prepares or refreshes that worktree before validating the resolved change.
+9. The worker asks OpenSpec for apply instructions in the prepared worktree.
+10. If the change is blocked, the worker comments back with the reason instead of guessing.
+11. The worker runs the apply executor with the selected agent in the same prepared worktree.
+12. The worker captures the opencode `sessionID` from the first structured event and persists it with the command request for later retries and debugging.
+13. The worker classifies the terminal outcome from the final session evidence rather than from the first intermediate generic error event, and ensures true failures always surface a non-empty summary instead of a blank message.
+14. The worker commits task-file updates and code changes together.
+15. The worker pushes the branch.
+16. The worker comments back with completed tasks, remaining tasks, or blockers.
 
 ## Workflow 4: Archive From A PR Comment
 

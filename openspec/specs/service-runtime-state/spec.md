@@ -69,3 +69,21 @@ Heimdall MUST persist blocked opencode permission request metadata for PR-commen
 - **WHEN** Heimdall persists a real blocked permission request for a PR-comment-driven run
 - **THEN** the stored pending request remains linked to the originating command request and same session identity
 - **AND** a later `/heimdall approve <request-id>` can recover the exact blocked run context without guessing
+
+### Requirement: PR-comment opencode session identities are stored durably
+Heimdall MUST persist the exact `sessionID` observed in the first structured opencode event for every PR-comment refine, apply, or generic opencode run. The stored session identity MUST remain linked to the originating command request, pull request, and any later pending permission request or retry metadata so restarts and operator debugging do not rely on logs alone.
+
+#### Scenario: First observed session ID is stored with the command execution state
+- **WHEN** Heimdall starts a PR-comment opencode run and the first structured event reports `sessionID` `ses_abc`
+- **THEN** Heimdall persists `ses_abc` as part of that run's durable execution state
+- **AND** later worker retries or inspection paths can recover the same observed session identity from runtime state
+
+#### Scenario: Pending permission request reuses the same persisted session ID
+- **WHEN** a PR-comment run later blocks on permission after Heimdall already observed and stored `sessionID` `ses_abc`
+- **THEN** the pending permission request remains linked to the same stored session identity `ses_abc`
+- **AND** a later approval command can resume the exact blocked session without guessing or synthesizing a new session handle
+
+#### Scenario: Session identity is never synthesized from missing data
+- **WHEN** Heimdall does not observe a real structured opencode event carrying a session identity for a PR-comment run
+- **THEN** it does not invent or persist a synthetic `sessionID`
+- **AND** it records that the real session identity was unavailable instead of storing guessed runtime state

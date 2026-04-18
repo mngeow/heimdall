@@ -38,7 +38,7 @@ flowchart TB
     Etc --> Key["github-app.pem"]
     VarLib --> State["state/heimdall.db"]
     VarLib --> Repos["repos/github.com/<owner>/<repo>.git"]
-    VarLib --> Worktrees["worktrees/<provider>/<issue-key>/"]
+    VarLib --> Worktrees["repos/github.com/<owner>/<repo>-worktrees/<branch-name>/"]
 ```
 
 ## Configuration Shape
@@ -115,6 +115,12 @@ Useful log fields:
 - `comment_id`
 - `agent`
 - `attempt`
+- `session_id` — the opencode session identity observed from the first structured event of a PR-comment run, so operators can correlate retries, approvals, and branch mutations with the same observed session
+
+Failure-message contract:
+
+- Heimdall never emits a blank `refine failed:` or `apply failed:` message. If the opencode session truly fails without a detailed structured error payload, Heimdall produces a non-empty fallback summary such as `opencode exited with error` or the last observed error text.
+- Heimdall classifies the terminal outcome from final session evidence and the process exit code, not from the first intermediate generic error event. This means an early empty `tool_use` error does not cause a false failure when the session later completes successfully.
 
 See `logging.md` for the full logging strategy and log-viewing commands.
 

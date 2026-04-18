@@ -343,7 +343,7 @@ func TestValidateChangeExistsRejectsStaleBinding(t *testing.T) {
 	fakeOpenspec := &stubOpenSpecClient{changes: []string{"other-change", "another-change"}}
 	executor := NewPRCommandExecutor(runtimeStore, nil, nil, fakeOpenspec, nil, nil)
 
-	err = executor.validateChangeExists(ctx, "stale-change", repo, pr)
+	err = executor.validateChangeExists(ctx, "stale-change", GenerateWorktreePath(repo.LocalMirrorPath, pr.HeadBranch))
 	if err == nil {
 		t.Fatal("expected error for stale change, got nil")
 	}
@@ -375,7 +375,7 @@ func TestValidateChangeExistsAcceptsExistingChange(t *testing.T) {
 	fakeOpenspec := &stubOpenSpecClient{changes: []string{"existing-change", "other-change"}}
 	executor := NewPRCommandExecutor(runtimeStore, nil, nil, fakeOpenspec, nil, nil)
 
-	err = executor.validateChangeExists(ctx, "existing-change", repo, pr)
+	err = executor.validateChangeExists(ctx, "existing-change", GenerateWorktreePath(repo.LocalMirrorPath, pr.HeadBranch))
 	if err != nil {
 		t.Fatalf("expected no error for existing change, got: %v", err)
 	}

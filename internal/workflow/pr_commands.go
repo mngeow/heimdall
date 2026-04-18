@@ -30,6 +30,7 @@ type ExecutionRequest struct {
 	PermissionProfile string
 	WorktreePath      string
 	RequestID         string
+	CommandRequestID  int64
 }
 
 type prCommandRepoManager interface {
@@ -52,6 +53,7 @@ type prCommandOpenSpecClient interface {
 }
 
 type prCommandExecClient interface {
+	SetWorktreePath(string)
 	RunRefine(ctx context.Context, agent, changeName, prompt string) (*exec.ExecutionOutcome, error)
 	RunApply(ctx context.Context, agent, changeName, prompt string) (*exec.ExecutionOutcome, error)
 	RunGeneric(ctx context.Context, agent, command, prompt string) error
@@ -165,17 +167,29 @@ func (e *PRCommandExecutor) ExecuteRefine(ctx context.Context, req ExecutionRequ
 		return fmt.Errorf("refine rejected: %w", err)
 	}
 
-	if err := e.validateChangeExists(ctx, changeName, repo, pr); err != nil {
+	worktreePath, err := e.prepareWorktree(ctx, pr, repo)
+	if err != nil {
+		return fmt.Errorf("failed to prepare worktree for refine: %w", err)
+	}
+
+	if err := e.validateChangeExists(ctx, changeName, worktreePath); err != nil {
 		return fmt.Errorf("refine rejected: %w", err)
 	}
 
-	if err := e.prepareWorktree(ctx, pr, repo); err != nil {
-		return fmt.Errorf("failed to prepare worktree for refine: %w", err)
-	}
+	e.exec.SetWorktreePath(worktreePath)
 
 	outcome, err := e.exec.RunRefine(ctx, req.Agent, changeName, req.PromptTail)
 	if err != nil {
 		return fmt.Errorf("refine failed: %w", err)
+	}
+
+	// Persist the observed session identity for later retries and debugging.
+	if outcome.SessionID != "" && req.CommandRequestID != 0 {
+		if r, err := e.store.GetCommandRequestByID(ctx, req.CommandRequestID); err == nil && r != nil {
+			r.SessionID = outcome.SessionID
+			_ = e.store.SaveCommandRequest(ctx, r)
+		}
+		logger = logger.With("session_id", outcome.SessionID)
 	}
 
 	switch outcome.Status {
@@ -186,7 +200,11 @@ func (e *PRCommandExecutor) ExecuteRefine(ctx context.Context, req ExecutionRequ
 	case "needs_permission":
 		return e.handleBlockedPermission(ctx, req, pr, repo, outcome)
 	default:
-		return fmt.Errorf("refine failed: %s", outcome.Summary)
+		summary := outcome.Summary
+		if summary == "" {
+			summary = "refine execution failed without a detailed error message"
+		}
+		return fmt.Errorf("refine failed: %s", summary)
 	}
 }
 
@@ -200,17 +218,29 @@ func (e *PRCommandExecutor) ExecuteApply(ctx context.Context, req ExecutionReque
 		return fmt.Errorf("apply rejected: %w", err)
 	}
 
-	if err := e.validateChangeExists(ctx, changeName, repo, pr); err != nil {
+	worktreePath, err := e.prepareWorktree(ctx, pr, repo)
+	if err != nil {
+		return fmt.Errorf("failed to prepare worktree for apply: %w", err)
+	}
+
+	if err := e.validateChangeExists(ctx, changeName, worktreePath); err != nil {
 		return fmt.Errorf("apply rejected: %w", err)
 	}
 
-	if err := e.prepareWorktree(ctx, pr, repo); err != nil {
-		return fmt.Errorf("failed to prepare worktree for apply: %w", err)
-	}
+	e.exec.SetWorktreePath(worktreePath)
 
 	outcome, err := e.exec.RunApply(ctx, req.Agent, changeName, req.PromptTail)
 	if err != nil {
 		return fmt.Errorf("apply failed: %w", err)
+	}
+
+	// Persist the observed session identity for later retries and debugging.
+	if outcome.SessionID != "" && req.CommandRequestID != 0 {
+		if r, err := e.store.GetCommandRequestByID(ctx, req.CommandRequestID); err == nil && r != nil {
+			r.SessionID = outcome.SessionID
+			_ = e.store.SaveCommandRequest(ctx, r)
+		}
+		logger = logger.With("session_id", outcome.SessionID)
 	}
 
 	switch outcome.Status {
@@ -221,7 +251,11 @@ func (e *PRCommandExecutor) ExecuteApply(ctx context.Context, req ExecutionReque
 	case "needs_permission":
 		return e.handleBlockedPermission(ctx, req, pr, repo, outcome)
 	default:
-		return fmt.Errorf("apply failed: %s", outcome.Summary)
+		summary := outcome.Summary
+		if summary == "" {
+			summary = "apply execution failed without a detailed error message"
+		}
+		return fmt.Errorf("apply failed: %s", summary)
 	}
 }
 
@@ -235,13 +269,16 @@ func (e *PRCommandExecutor) ExecuteOpencode(ctx context.Context, req ExecutionRe
 		return fmt.Errorf("opencode rejected: %w", err)
 	}
 
-	if err := e.validateChangeExists(ctx, changeName, repo, pr); err != nil {
+	worktreePath, err := e.prepareWorktree(ctx, pr, repo)
+	if err != nil {
+		return fmt.Errorf("failed to prepare worktree for opencode: %w", err)
+	}
+
+	if err := e.validateChangeExists(ctx, changeName, worktreePath); err != nil {
 		return fmt.Errorf("opencode rejected: %w", err)
 	}
 
-	if err := e.prepareWorktree(ctx, pr, repo); err != nil {
-		return fmt.Errorf("failed to prepare worktree for opencode: %w", err)
-	}
+	e.exec.SetWorktreePath(worktreePath)
 
 	if err := e.exec.RunGeneric(ctx, req.Agent, req.Alias, req.PromptTail); err != nil {
 		return fmt.Errorf("opencode command %s failed: %w", req.Alias, err)
@@ -278,23 +315,23 @@ func (e *PRCommandExecutor) ExecuteApprove(ctx context.Context, req ExecutionReq
 	return e.commentResult(ctx, pr, repo, msg)
 }
 
-func (e *PRCommandExecutor) prepareWorktree(ctx context.Context, pr *store.PullRequest, repo *store.Repository) error {
+func (e *PRCommandExecutor) prepareWorktree(ctx context.Context, pr *store.PullRequest, repo *store.Repository) (string, error) {
 	token, err := e.github.GetInstallationToken(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get installation token: %w", err)
+		return "", fmt.Errorf("failed to get installation token: %w", err)
 	}
 	if err := e.repoMgr.EnsureBareMirror(ctx, repo.LocalMirrorPath, repo.Owner, repo.Name, token); err != nil {
-		return fmt.Errorf("failed to ensure bare mirror: %w", err)
+		return "", fmt.Errorf("failed to ensure bare mirror: %w", err)
 	}
-	worktreePath := fmt.Sprintf("/tmp/heimdall-worktrees/%s/%s", repo.RepoRef, pr.HeadBranch)
+	worktreePath := GenerateWorktreePath(repo.LocalMirrorPath, pr.HeadBranch)
 	if err := e.repoMgr.CreateWorktree(ctx, repo.LocalMirrorPath, repo.DefaultBranch, pr.HeadBranch, worktreePath); err != nil {
-		return fmt.Errorf("failed to create worktree: %w", err)
+		return "", fmt.Errorf("failed to create worktree: %w", err)
 	}
-	return nil
+	return worktreePath, nil
 }
 
 func (e *PRCommandExecutor) commitAndPushOutcome(ctx context.Context, pr *store.PullRequest, repo *store.Repository, command, changeName, agent string, outcome *exec.ExecutionOutcome) error {
-	worktreePath := fmt.Sprintf("/tmp/heimdall-worktrees/%s/%s", repo.RepoRef, pr.HeadBranch)
+	worktreePath := GenerateWorktreePath(repo.LocalMirrorPath, pr.HeadBranch)
 	hasChanges, err := e.repoMgr.HasChanges(ctx, worktreePath)
 	if err != nil {
 		return fmt.Errorf("failed to check for changes: %w", err)
@@ -320,10 +357,17 @@ func (e *PRCommandExecutor) handleBlockedPermission(ctx context.Context, req Exe
 	if outcome.RequestID == "" || outcome.SessionID == "" {
 		return fmt.Errorf("blocked on permission but missing request or session ID; cannot create approval command")
 	}
+	// Reuse the stored session ID from the originating command request if available.
+	sessionID := outcome.SessionID
+	if req.CommandRequestID != 0 {
+		if r, err := e.store.GetCommandRequestByID(ctx, req.CommandRequestID); err == nil && r != nil && r.SessionID != "" {
+			sessionID = r.SessionID
+		}
+	}
 	permReq := &store.PendingPermissionRequest{
 		RequestID:        outcome.RequestID,
-		SessionID:        outcome.SessionID,
-		CommandRequestID: 0,
+		SessionID:        sessionID,
+		CommandRequestID: req.CommandRequestID,
 		PullRequestID:    pr.ID,
 		RepositoryID:     repo.ID,
 		Status:           "pending",
@@ -343,11 +387,10 @@ func (e *PRCommandExecutor) commentResult(ctx context.Context, pr *store.PullReq
 	return nil
 }
 
-func (e *PRCommandExecutor) validateChangeExists(ctx context.Context, changeName string, repo *store.Repository, pr *store.PullRequest) error {
+func (e *PRCommandExecutor) validateChangeExists(ctx context.Context, changeName string, worktreePath string) error {
 	if e.openspec == nil {
 		return nil // skip validation when no openspec client is configured (tests)
 	}
-	worktreePath := fmt.Sprintf("/tmp/heimdall-worktrees/%s/%s", repo.RepoRef, pr.HeadBranch)
 	e.openspec.SetWorktreePath(worktreePath)
 	changes, err := e.openspec.ListChanges(ctx)
 	if err != nil {

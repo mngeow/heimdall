@@ -89,6 +89,39 @@ Heimdall MUST invoke PR-comment-driven refine and apply runs by using supported 
 - **THEN** it has observed a real machine-readable permission event such as `permission.asked`
 - **AND** it extracts the exact permission request ID and session ID from that event before persisting or commenting on the blocker
 
+### Requirement: Opencode JSON event parsing tolerates large newline-delimited events and preserves terminal session outcome
+Heimdall MUST consume `opencode run --format json` output as a newline-delimited JSON event stream without relying on reader token limits that reject otherwise valid single-event lines. Heimdall MUST continue classifying permission, input, error, and completion outcomes even when an individual event line contains a very large text or tool payload, MAY ignore non-JSON noise lines, and MUST still process a final valid JSON event line that ends at EOF without a trailing newline. Heimdall MUST capture the `sessionID` from the first structured event for the run, MUST use blocker events such as permission and input as immediate outcomes, and MUST NOT treat an intermediate generic error event as terminal when later structured events or process completion show the session reached a different final outcome.
+
+#### Scenario: Large text event line does not abort parsing
+- **WHEN** Heimdall is reading `opencode run --format json` output for a PR-comment refine or apply run and a valid `text` event line contains a payload large enough to exceed traditional scanner token thresholds
+- **THEN** Heimdall continues consuming the event stream
+- **AND** it does not fail the command only because its local event reader rejected that large line
+
+#### Scenario: Later structured events are still classified after a large event
+- **WHEN** a large valid JSON event line is followed by later structured events such as `permission.asked`, `tool_use`, or `step_finish`
+- **THEN** Heimdall still observes those later events
+- **AND** it classifies the execution outcome from the structured event stream instead of aborting early with a token-length reader error
+
+#### Scenario: Final event at EOF is still processed
+- **WHEN** the opencode process exits after writing a final valid JSON event line without a trailing newline
+- **THEN** Heimdall still parses that final event
+- **AND** it does not drop the terminal outcome solely because the stream ended at EOF
+
+#### Scenario: Intermediate empty tool error does not override a later successful completion
+- **WHEN** a PR-comment refine or apply run emits a generic `tool_use` error event with empty output and later structured events or a clean process exit show the opencode session completed successfully
+- **THEN** Heimdall classifies the command from that later terminal success evidence
+- **AND** it does not mark the run failed only because of the earlier empty generic error event
+
+#### Scenario: Real failure without structured detail still produces a non-empty summary
+- **WHEN** a PR-comment opencode run truly fails but the terminal structured events do not contain a useful human-readable error payload
+- **THEN** Heimdall reports a non-empty fallback failure summary
+- **AND** it does not emit a blank message such as `refine failed:` or `apply failed:`
+
+#### Scenario: First structured event provides the canonical session identity
+- **WHEN** Heimdall receives the first structured opencode event for a PR-comment run and that event includes `sessionID` `ses_abc`
+- **THEN** Heimdall records `ses_abc` as the canonical session identity for that execution attempt
+- **AND** it includes that same session identity in execution logs and later runtime-state linkage for the run
+
 ### Requirement: PR-command executor outcomes reflect real execution
 Heimdall MUST treat the executor entry points behind queued PR commands as real execution boundaries. For `/heimdall status`, `/heimdall refine`, `/heimdall apply`, `/heimdall opencode`, and `/heimdall approve`, Heimdall MUST derive PR feedback and persisted outcome state from the actual command work that ran, not from placeholder completion comments or state-only acknowledgments.
 
