@@ -184,7 +184,7 @@ erDiagram
 
     COMMAND_RUNS {
         integer id PK
-        integer command_request_id FK UK
+        integer command_request_id FK
         text session_id
         text status
         text status_reason

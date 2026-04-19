@@ -1,0 +1,105 @@
+site_name: Heimdall Documentation
+site_description: Heimdall - Kanban-driven OpenSpec engineering automation
+copyright: Heimdall Project
+
+nav:
+  - Home: index.md
+  - Product: product.md
+  - Architecture: architecture.md
+  - Workflows: workflows.md
+  - Authentication: authentication.md
+  - Operations: operations.md
+  - Logging: logging.md
+  - Extensibility: extensibility.md
+  - Runtime State: runtime-state.md
+  - GitHub Polling: github-polling.md
+  - Worker Execution: worker-execution.md
+  - Setup:
+    - Overview: setup/README.md
+    - Linux Host: setup/linux-host.md
+    - GitHub: setup/github.md
+    - Linear: setup/linear.md
+  - Database:
+    - Overview: database/README.md
+    - Schema: database/schema.md
+  - Tags: tags.md
+
+theme:
+  name: material
+  palette:
+    # Dark mode (slate) as default
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    # Light mode fallback
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+
+plugins:
+  - search
+  - tags:
+      tags_file: tags.md
+
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.details
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  - admonition
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+      title: On this page
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/mngeow/heimdall
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10.9.1/dist/mermaid.min.js
+
+extra_css:
+  - stylesheets/extra.css

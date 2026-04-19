@@ -1,0 +1,13 @@
+:root {
+  /* Additional customizations for Heimdall dark theme */
+  --md-typeset-a-color: #4dabf7;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-hue: 220;
+}
+
+/* Mermaid diagram styling improvements */
+.mermaid {
+  background: transparent !important;
+}
