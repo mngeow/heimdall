@@ -37,6 +37,22 @@ Feature: Pull request command handling
       And Heimdall should commit the changes
       And Heimdall should push the updated branch
 
+    Scenario: Mixed inline and multiline refine prompt is preserved
+      Given a Heimdall-managed pull request exists
+      And the repository allows agent "gpt-5.4"
+      When the user comments a multiline refine command with inline separator
+      And Heimdall polls GitHub
+      Then Heimdall should discover the comment during polling
+      And Heimdall should preserve the full prompt tail
+
+    Scenario: Triple backtick delimited refine prompt is stripped
+      Given a Heimdall-managed pull request exists
+      And the repository allows agent "gpt-5.4"
+      When the user comments a refine command with triple backtick prompt
+      And Heimdall polls GitHub
+      Then Heimdall should discover the comment during polling
+      And Heimdall should strip backticks and preserve inner content
+
     Scenario: Refine with omitted change name and no active target is rejected
       Given a Heimdall-managed pull request exists with no active changes
       And the repository allows agent "gpt-5.4"
