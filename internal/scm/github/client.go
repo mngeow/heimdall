@@ -249,6 +249,21 @@ func (c *Client) CreateComment(ctx context.Context, owner, repo string, number i
 	return nil
 }
 
+// AddReaction adds a reaction to an issue comment.
+func (c *Client) AddReaction(ctx context.Context, owner, repo string, commentID int64, content string) error {
+	apiClient, err := c.newAPIClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = apiClient.Reactions.CreateIssueCommentReaction(ctx, owner, repo, commentID, content)
+	if err != nil {
+		return fmt.Errorf("failed to add reaction to comment %d: %w", commentID, err)
+	}
+
+	return nil
+}
+
 // GetPullRequest retrieves a pull request by number.
 func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number int) (*gh.PullRequest, error) {
 	apiClient, err := c.newAPIClient(ctx)

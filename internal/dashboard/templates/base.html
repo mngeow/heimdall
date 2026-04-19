@@ -31,6 +31,49 @@
     .timeline { list-style: none; padding: 0; margin: 0; }
     .timeline li { padding: 12px 0; border-bottom: 1px solid #21262d; }
     .timeline .meta { color: #8b949e; font-size: 12px; }
+    .terminal-banner { padding: 16px; border-radius: 10px; margin-bottom: 24px; font-weight: 600; }
+    .status-completed { background: #238636; color: #fff; }
+    .status-failed { background: #da3633; color: #fff; }
+    .status-blocked { background: #9e8c6c; color: #fff; }
+    .status-running { background: #1f6feb; color: #fff; }
+    .status-starting { background: #8957e5; color: #fff; }
+    .status-queued { background: #30363d; color: #c9d1d9; }
+    .entry-type-blocker { color: #f0883e; }
+    .entry-type-terminal { color: #3fb950; font-weight: 600; }
+    .entry-type-tool_status { color: #58a6ff; }
+    .entry-type-error { color: #f85149; }
+
+    /* Rich timeline rendering */
+    .timeline-entry { padding: 16px; border-radius: 8px; margin-bottom: 8px; background: #161b22; border: 1px solid #30363d; }
+    .tool-entry { border-left: 4px solid #58a6ff; }
+    .tool-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .tool-icon { font-size: 18px; }
+    .tool-name { font-weight: 600; font-size: 14px; }
+    .tool-section { margin: 12px 0; padding: 12px; background: #0d1117; border-radius: 6px; }
+    .tool-input-section { border-left: 3px solid #8b949e; }
+    .tool-output-section { border-left: 3px solid #3fb950; }
+    .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; font-weight: 600; margin-bottom: 4px; display: block; }
+    .input-row { margin: 4px 0; font-size: 13px; }
+    .input-row code { background: #21262d; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    .tool-output { margin: 8px 0 0; padding: 12px; background: #0d1117; border-radius: 6px; overflow-x: auto; font-size: 12px; line-height: 1.5; max-height: 400px; overflow-y: auto; border: 1px solid #30363d; }
+    .markdown-box { margin: 8px 0; padding: 12px; background: #0d1117; border-radius: 6px; border: 1px solid #30363d; overflow-x: auto; font-size: 12px; line-height: 1.5; max-height: 400px; overflow-y: auto; }
+    .tool-meta { display: flex; gap: 16px; margin-top: 8px; font-size: 11px; color: #8b949e; }
+    .meta-item { background: #21262d; padding: 2px 8px; border-radius: 4px; }
+    .step-start-entry { border-left: 4px solid #8957e5; }
+    .step-finish-entry { border-left: 4px solid #3fb950; }
+    .step-header { font-weight: 600; margin-bottom: 8px; }
+    .step-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: #8b949e; }
+    .token-count { font-weight: 600; color: #c9d1d9; }
+    .cost { color: #3fb950; font-weight: 600; }
+    .text-entry { border-left: 4px solid #8b949e; }
+    .text-content { white-space: pre-wrap; font-size: 13px; line-height: 1.5; }
+    .error-entry { border-left: 4px solid #f85149; background: #3d0f0f; }
+    .error-label { font-weight: 600; color: #f85149; margin-bottom: 8px; }
+    .error-output { margin: 0; padding: 12px; background: #0d1117; border-radius: 6px; color: #f85149; font-size: 12px; }
+    .blocker-entry { border-left: 4px solid #f0883e; background: #3d2100; }
+    .blocker-label { font-weight: 600; color: #f0883e; }
+    .generic-entry { border-left: 4px solid #30363d; }
+    .entry-time { font-size: 11px; color: #8b949e; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -39,6 +82,7 @@
       <a href="/ui">Overview</a>
       <a href="/ui/work-items">Work Items</a>
       <a href="/ui/pull-requests">Pull Requests</a>
+      <a href="/ui/command-runs">Command Runs</a>
     </nav>
     {{template "content" .}}
   </div>

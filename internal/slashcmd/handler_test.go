@@ -236,7 +236,7 @@ func TestIntakeProcess(t *testing.T) {
 	}
 
 	queue := store.NewJobQueue(runtimeStore)
-	intake := NewIntake(runtimeStore, queue, slog.Default())
+	intake := NewIntake(runtimeStore, queue, slog.Default(), nil, "")
 	repoConfig := config.RepoConfig{
 		AllowedUsers:  []string{"alice"},
 		AllowedAgents: []string{"gpt-5.4"},
@@ -244,7 +244,7 @@ func TestIntakeProcess(t *testing.T) {
 	pr := &store.PullRequest{ID: 11, Number: 42}
 
 	t.Run("authorized command queues once", func(t *testing.T) {
-		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", "alice", "/opsx-apply --agent gpt-5.4")
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", 0, "alice", "/opsx-apply --agent gpt-5.4")
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}
@@ -265,7 +265,7 @@ func TestIntakeProcess(t *testing.T) {
 	})
 
 	t.Run("duplicate observation is ignored", func(t *testing.T) {
-		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", "alice", "/opsx-apply --agent gpt-5.4")
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", 0, "alice", "/opsx-apply --agent gpt-5.4")
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}
@@ -275,7 +275,7 @@ func TestIntakeProcess(t *testing.T) {
 	})
 
 	t.Run("edited command stays duplicate by identity", func(t *testing.T) {
-		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", "alice", "/heimdall refine updated text")
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_1", 0, "alice", "/heimdall refine updated text")
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}
@@ -285,7 +285,7 @@ func TestIntakeProcess(t *testing.T) {
 	})
 
 	t.Run("unauthorized command is rejected", func(t *testing.T) {
-		result, err := intake.Process(ctx, repoConfig, pr, "IC_2", "mallory", "/heimdall status")
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_2", 0, "mallory", "/heimdall status")
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}
@@ -303,7 +303,7 @@ func TestIntakeProcess(t *testing.T) {
 	})
 
 	t.Run("plain comment is ignored", func(t *testing.T) {
-		result, err := intake.Process(ctx, repoConfig, pr, "IC_3", "alice", "looks good to me")
+		result, err := intake.Process(ctx, repoConfig, pr, "IC_3", 0, "alice", "looks good to me")
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}

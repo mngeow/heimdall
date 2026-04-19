@@ -23,6 +23,9 @@
   <li>
     <div><strong>{{.CommandName}}</strong> {{if .CommandArgs}}— {{.CommandArgs}}{{end}}</div>
     <div class="meta">Actor: {{.ActorLogin}} | Auth: {{.AuthorizationStatus}} | Status: {{.Status}} {{if .RequestedAgent}}| Agent: {{.RequestedAgent}}{{end}}</div>
+    {{if eq .Status "queued" "running" "starting" "blocked" "completed" "failed"}}
+    <div class="meta"><a href="/ui/command-runs/{{.ID}}">View command run →</a></div>
+    {{end}}
   </li>
   {{end}}
 </ul>

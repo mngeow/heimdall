@@ -7,15 +7,23 @@ import (
 	"strings"
 
 	"github.com/mngeow/heimdall/internal/config"
+	"github.com/mngeow/heimdall/internal/scm/github"
 	"github.com/mngeow/heimdall/internal/store"
 )
 
 // Intake persists and deduplicates command observations from GitHub polling.
 type Intake struct {
-	store  *store.Store
-	queue  *store.JobQueue
-	logger *slog.Logger
-	parser *Parser
+	store     *store.Store
+	queue     *store.JobQueue
+	logger    *slog.Logger
+	parser    *Parser
+	github    intakeGitHubClient
+	publicURL string
+}
+
+type intakeGitHubClient interface {
+	AddReaction(ctx context.Context, owner, repo string, commentID int64, content string) error
+	CreateComment(ctx context.Context, owner, repo string, number int, body string) error
 }
 
 // ProcessResult describes how Symphony handled a polled comment.
@@ -28,17 +36,19 @@ type ProcessResult struct {
 }
 
 // NewIntake creates a new polling intake handler.
-func NewIntake(store *store.Store, queue *store.JobQueue, logger *slog.Logger) *Intake {
+func NewIntake(store *store.Store, queue *store.JobQueue, logger *slog.Logger, githubClient intakeGitHubClient, publicURL string) *Intake {
 	return &Intake{
-		store:  store,
-		queue:  queue,
-		logger: logger,
-		parser: NewParser(logger),
+		store:     store,
+		queue:     queue,
+		logger:    logger,
+		parser:    NewParser(logger),
+		github:    githubClient,
+		publicURL: publicURL,
 	}
 }
 
 // Process converts a discovered GitHub comment into a persisted command request.
-func (i *Intake) Process(ctx context.Context, repoConfig config.RepoConfig, pr *store.PullRequest, commentNodeID, actor, body string) (*ProcessResult, error) {
+func (i *Intake) Process(ctx context.Context, repoConfig config.RepoConfig, pr *store.PullRequest, commentNodeID string, commentID int64, actor, body string) (*ProcessResult, error) {
 	dedupeKey := CommandDedupeKey(commentNodeID)
 	existing, err := i.store.GetCommandRequestByDedupeKey(ctx, dedupeKey)
 	if err != nil {
@@ -109,7 +119,55 @@ func (i *Intake) Process(ctx context.Context, repoConfig config.RepoConfig, pr *
 		return nil, fmt.Errorf("failed to enqueue command job: %w", err)
 	}
 
+	// Post acceptance feedback asynchronously; failures must not prevent execution.
+	i.sendAcceptanceFeedback(ctx, repoConfig, pr, commentID, request, command)
+
 	return &ProcessResult{Status: request.Status, Command: command, Request: request, Job: job}, nil
+}
+
+func (i *Intake) sendAcceptanceFeedback(ctx context.Context, repoConfig config.RepoConfig, pr *store.PullRequest, commentID int64, req *store.CommandRequest, cmd *Command) {
+	owner, repoName, err := github.ParseRepoRef(repoConfig.Name)
+	if err != nil {
+		i.logger.Error("failed to parse repo ref for feedback", "repo", repoConfig.Name, "error", err)
+		return
+	}
+
+	if !req.FeedbackReactionPosted {
+		if err := i.github.AddReaction(ctx, owner, repoName, commentID, "eyes"); err != nil {
+			i.logger.Error("failed to post eyes reaction", "command_request_id", req.ID, "error", err)
+		} else {
+			req.FeedbackReactionPosted = true
+			if saveErr := i.store.SaveCommandRequest(ctx, req); saveErr != nil {
+				i.logger.Error("failed to save reaction posted flag", "command_request_id", req.ID, "error", saveErr)
+			}
+		}
+	}
+
+	if isOpencodeBackedCommand(cmd.Name) && !req.FeedbackLinkPosted {
+		url := buildCommandRunURL(i.publicURL, req.ID)
+		msg := fmt.Sprintf("Heimdall is processing this command. [View live output →](%s)", url)
+		if err := i.github.CreateComment(ctx, owner, repoName, pr.Number, msg); err != nil {
+			i.logger.Error("failed to post command link comment", "command_request_id", req.ID, "error", err)
+		} else {
+			req.FeedbackLinkPosted = true
+			if saveErr := i.store.SaveCommandRequest(ctx, req); saveErr != nil {
+				i.logger.Error("failed to save link posted flag", "command_request_id", req.ID, "error", saveErr)
+			}
+		}
+	}
+}
+
+func isOpencodeBackedCommand(name string) bool {
+	switch name {
+	case "refine", "apply", "opencode":
+		return true
+	}
+	return false
+}
+
+func buildCommandRunURL(baseURL string, commandRequestID int64) string {
+	base := strings.TrimSuffix(baseURL, "/")
+	return fmt.Sprintf("%s/ui/command-runs/%d", base, commandRequestID)
 }
 
 // CommandDedupeKey returns the durable dedupe key for a GitHub command comment.

@@ -1,0 +1,166 @@
+{{define "command_run_detail.html"}}
+{{template "base.html" .}}
+{{end}}
+
+{{define "content"}}
+<h1>Command Run #{{.Detail.CommandRequestID}}</h1>
+
+<div class="card">
+  <p>
+    <strong>{{.Detail.CommandName}}</strong>
+    <span class="badge status-{{.Detail.Status}}">{{.Detail.Status}}</span>
+    {{if .Detail.SessionID}}<span class="muted">| Session: {{.Detail.SessionID}}</span>{{end}}
+  </p>
+  <p class="muted">
+    Repository: {{.Detail.RepoRef}} |
+    PR: <a href="/ui/pull-requests/{{.Detail.CommandRequestID}}">#{{.Detail.PRNumber}}</a> {{.Detail.PRTitle}} |
+    Actor: {{.Detail.ActorLogin}}
+  </p>
+  {{if .Detail.StatusReason}}<p class="muted">Reason: {{.Detail.StatusReason}}</p>{{end}}
+  {{if .Detail.TerminalSummary}}<p class="muted">Summary: {{.Detail.TerminalSummary}}</p>{{end}}
+  <p class="muted">
+    {{if .Detail.StartedAt}}Started: {{.Detail.StartedAt.Format "2006-01-02 15:04:05"}}{{end}}
+    {{if .Detail.CompletedAt}}| Completed: {{.Detail.CompletedAt.Format "2006-01-02 15:04:05"}}{{end}}
+  </p>
+</div>
+
+{{if .IsTerminal}}
+<div class="terminal-banner status-{{.Detail.Status}}">
+  <strong>{{.Detail.Status}}</strong>
+  {{if .Detail.TerminalSummary}}— {{.Detail.TerminalSummary}}{{end}}
+</div>
+{{end}}
+
+<h2>Live Output</h2>
+<div id="timeline-container"
+  {{if not .IsTerminal}}
+  hx-get="/ui/command-runs/{{.Detail.CommandRequestID}}/timeline"
+  hx-trigger="every 3s"
+  hx-swap="outerHTML"
+  {{end}}>
+  {{template "timeline_content" .}}
+</div>
+
+<p><a href="/ui/command-runs">← Back to command runs</a></p>
+{{end}}
+
+{{define "timeline_content"}}
+{{if .Timeline}}
+<ul class="timeline">
+  {{range .Timeline}}
+  {{if eq .EntryType "tool_use"}}
+  <li class="timeline-entry tool-entry">
+    <div class="tool-header">
+      <span class="tool-icon">🛠️</span>
+      <span class="tool-name">{{.DisplayText}}</span>
+      <span class="badge status-{{index .Metadata "status"}}">{{index .Metadata "status"}}</span>
+    </div>
+    {{$input := index .Metadata "input"}}
+    {{if $input}}
+    <div class="tool-section tool-input-section">
+      {{if index $input "command"}}
+      <div class="input-row"><span class="section-label">Command:</span> <code>{{index $input "command"}}</code></div>
+      {{end}}
+      {{if index $input "description"}}
+      <div class="input-row"><span class="section-label">Description:</span> {{index $input "description"}}</div>
+      {{end}}
+      {{if index $input "pattern"}}
+      <div class="input-row"><span class="section-label">Pattern:</span> <code>{{index $input "pattern"}}</code></div>
+      {{end}}
+      {{if index $input "filePath"}}
+      <div class="input-row"><span class="section-label">File:</span> <code>{{index $input "filePath"}}</code></div>
+      {{end}}
+      {{if index $input "name"}}
+      <div class="input-row"><span class="section-label">Skill:</span> {{index $input "name"}}</div>
+      {{end}}
+    </div>
+    {{end}}
+    {{$output := index .Metadata "output"}}
+    {{if $output}}
+    <div class="tool-section tool-output-section">
+      <div class="section-label">Output</div>
+      <pre class="tool-output">{{$output}}</pre>
+    </div>
+    {{end}}
+    {{$meta := index .Metadata "metadata"}}
+    {{if $meta}}
+    <div class="tool-meta">
+      {{if index $meta "exit"}}<span class="meta-item">Exit: {{index $meta "exit"}}</span>{{end}}
+      {{if index $meta "time"}}<span class="meta-item">Time: {{index $meta "time"}}ms</span>{{end}}
+    </div>
+    {{end}}
+    <div class="entry-time">{{.CreatedAt.Format "15:04:05"}}</div>
+  </li>
+  {{else if eq .EntryType "step_start"}}
+  <li class="timeline-entry step-start-entry">
+    <div class="step-header">▶️ Step started</div>
+    <div class="entry-time">{{.CreatedAt.Format "15:04:05"}}</div>
+  </li>
+  {{else if eq .EntryType "step_finish"}}
+  <li class="timeline-entry step-finish-entry">
+    <div class="step-header">✅ Step completed</div>
+    {{$tokens := index .Metadata "tokens"}}
+    {{if $tokens}}
+    <div class="step-meta">
+      <span class="token-count">Tokens: {{index $tokens "total"}}</span>
+      <span class="token-breakdown">
+        ({{index $tokens "input"}} input, {{index $tokens "output"}} output)
+        {{$reasoning := index $tokens "reasoning"}}
+        {{if $reasoning}}| Reasoning: {{$reasoning}}{{end}}
+      </span>
+      {{$cost := index .Metadata "cost"}}
+      {{if $cost}}<span class="cost">Cost: ${{printf "%.4f" $cost}}</span>{{end}}
+    </div>
+    {{end}}
+    <div class="entry-time">{{.CreatedAt.Format "15:04:05"}}</div>
+  </li>
+  {{else if eq .EntryType "text"}}
+  <li class="timeline-entry text-entry">
+    <div class="markdown-box">
+      <pre style="margin:0;white-space:pre-wrap;word-wrap:break-word;">{{.DisplayText}}</pre>
+    </div>
+    <div class="entry-time">{{.CreatedAt.Format "15:04:05"}}</div>
+  </li>
+  {{else if eq .EntryType "error"}}
+  <li class="timeline-entry error-entry">
+    <div class="error-label">❌ Error</div>
+    <div class="markdown-box" style="border-color: #f85149;">
+      <pre class="error-output">{{.DisplayText}}</pre>
+    </div>
+    <div class="entry-time">{{.CreatedAt.Format "15:04:05"}}</div>
+  </li>
+  {{else if eq .EntryType "blocker"}}
+  <li class="timeline-entry blocker-entry">
+    <div class="blocker-label">⚠️ {{.DisplayText}}</div>
+    <div class="entry-time">{{.CreatedAt.Format "15:04:05"}}</div>
+  </li>
+  {{else}}
+  <li class="timeline-entry generic-entry">
+    <div>{{.DisplayText}}</div>
+    <div class="meta">{{.EntryType}} | {{.CreatedAt.Format "15:04:05"}}</div>
+  </li>
+  {{end}}
+  {{end}}
+</ul>
+{{if .HasMoreEntries}}
+<p><a href="/ui/command-runs/{{.Detail.CommandRequestID}}?limit={{.Limit}}&offset={{add .Offset .Limit}}">Load earlier entries</a></p>
+{{end}}
+{{else}}
+<p class="muted">No output entries yet.</p>
+{{end}}
+{{end}}
+
+{{define "command_run_detail_fragment.html"}}
+{{template "content" .}}
+{{end}}
+
+{{define "command_run_timeline_fragment.html"}}
+<div id="timeline-container"
+  {{if not .IsTerminal}}
+  hx-get="/ui/command-runs/{{.Detail.CommandRequestID}}/timeline"
+  hx-trigger="every 3s"
+  hx-swap="outerHTML"
+  {{end}}>
+  {{template "timeline_content" .}}
+</div>
+{{end}}

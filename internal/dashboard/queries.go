@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -415,4 +416,174 @@ func (q *Queries) DistinctWorkItemBuckets(ctx context.Context) ([]string, error)
 		vals = append(vals, v)
 	}
 	return vals, rows.Err()
+}
+
+// CommandRunRow holds a single row for the active command-run list.
+type CommandRunRow struct {
+	CommandRunID     int64
+	CommandRequestID int64
+	RepoRef          string
+	PRNumber         int
+	PRTitle          string
+	ActorLogin       string
+	CommandName      string
+	Status           string
+	SessionID        string
+	StartedAt        *time.Time
+}
+
+// ActiveCommandRuns returns currently active opencode-backed command runs.
+func (q *Queries) ActiveCommandRuns(ctx context.Context) ([]CommandRunRow, error) {
+	query := `
+SELECT
+	cr.id,
+	cr.command_request_id,
+	COALESCE(r.repo_ref, '') AS repo_ref,
+	COALESCE(pr.number, 0) AS pr_number,
+	COALESCE(pr.title, '') AS pr_title,
+	COALESCE(cr_req.actor_login, '') AS actor_login,
+	COALESCE(cr_req.command_name, '') AS command_name,
+	cr.status,
+	COALESCE(cr.session_id, '') AS session_id,
+	cr.started_at
+FROM command_runs cr
+JOIN command_requests cr_req ON cr_req.id = cr.command_request_id
+JOIN pull_requests pr ON pr.id = cr_req.pull_request_id
+JOIN repositories r ON r.id = pr.repository_id
+WHERE cr.status IN ('queued', 'starting', 'running', 'blocked')
+ORDER BY cr.started_at DESC, cr.id DESC
+`
+	rows, err := q.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("active command runs query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var results []CommandRunRow
+	for rows.Next() {
+		var row CommandRunRow
+		var startedAt sql.NullTime
+		if err := rows.Scan(&row.CommandRunID, &row.CommandRequestID, &row.RepoRef, &row.PRNumber, &row.PRTitle, &row.ActorLogin, &row.CommandName, &row.Status, &row.SessionID, &startedAt); err != nil {
+			return nil, fmt.Errorf("active command runs scan failed: %w", err)
+		}
+		if startedAt.Valid {
+			row.StartedAt = &startedAt.Time
+		}
+		results = append(results, row)
+	}
+	return results, rows.Err()
+}
+
+// CommandRunDetail holds the full detail view for a single command run.
+type CommandRunDetail struct {
+	CommandRunID     int64
+	CommandRequestID int64
+	RepoRef          string
+	PRNumber         int
+	PRTitle          string
+	ActorLogin       string
+	CommandName      string
+	Status           string
+	StatusReason     string
+	TerminalSummary  string
+	SessionID        string
+	StartedAt        *time.Time
+	CompletedAt      *time.Time
+}
+
+// CommandRunDetail returns the detail view for a command run.
+func (q *Queries) CommandRunDetail(ctx context.Context, commandRequestID int64) (*CommandRunDetail, error) {
+	query := `
+SELECT
+	cr.id,
+	cr.command_request_id,
+	COALESCE(r.repo_ref, '') AS repo_ref,
+	COALESCE(pr.number, 0) AS pr_number,
+	COALESCE(pr.title, '') AS pr_title,
+	COALESCE(cr_req.actor_login, '') AS actor_login,
+	COALESCE(cr_req.command_name, '') AS command_name,
+	cr.status,
+	COALESCE(cr.status_reason, '') AS status_reason,
+	COALESCE(cr.terminal_summary, '') AS terminal_summary,
+	COALESCE(cr.session_id, '') AS session_id,
+	cr.started_at,
+	cr.completed_at
+FROM command_runs cr
+JOIN command_requests cr_req ON cr_req.id = cr.command_request_id
+JOIN pull_requests pr ON pr.id = cr_req.pull_request_id
+JOIN repositories r ON r.id = pr.repository_id
+WHERE cr.command_request_id = ?
+`
+	var detail CommandRunDetail
+	var statusReason, terminalSummary, sessionID sql.NullString
+	var startedAt, completedAt sql.NullTime
+	err := q.db.QueryRowContext(ctx, query, commandRequestID).Scan(
+		&detail.CommandRunID, &detail.CommandRequestID, &detail.RepoRef, &detail.PRNumber, &detail.PRTitle,
+		&detail.ActorLogin, &detail.CommandName, &detail.Status, &statusReason, &terminalSummary,
+		&sessionID, &startedAt, &completedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("command run detail query failed: %w", err)
+	}
+	if statusReason.Valid {
+		detail.StatusReason = statusReason.String
+	}
+	if terminalSummary.Valid {
+		detail.TerminalSummary = terminalSummary.String
+	}
+	if sessionID.Valid {
+		detail.SessionID = sessionID.String
+	}
+	if startedAt.Valid {
+		detail.StartedAt = &startedAt.Time
+	}
+	if completedAt.Valid {
+		detail.CompletedAt = &completedAt.Time
+	}
+	return &detail, nil
+}
+
+// CommandTimelineRow holds a single timeline entry for the command detail view.
+type CommandTimelineRow struct {
+	Sequence    int
+	EntryType   string
+	DisplayText string
+	Metadata    map[string]any
+	CreatedAt   time.Time
+}
+
+// CommandTimeline returns ordered timeline entries for a command run, bounded by limit and offset.
+func (q *Queries) CommandTimeline(ctx context.Context, commandRunID int64, limit, offset int) ([]CommandTimelineRow, error) {
+	rows, err := q.db.QueryContext(ctx,
+		`SELECT sequence, entry_type, display_text, metadata_json, created_at
+		 FROM command_timeline_entries
+		 WHERE command_run_id = ?
+		 ORDER BY sequence DESC
+		 LIMIT ? OFFSET ?`,
+		commandRunID, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("command timeline query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []CommandTimelineRow
+	for rows.Next() {
+		var e CommandTimelineRow
+		var metaJSON string
+		if err := rows.Scan(&e.Sequence, &e.EntryType, &e.DisplayText, &metaJSON, &e.CreatedAt); err != nil {
+			return nil, fmt.Errorf("command timeline scan failed: %w", err)
+		}
+		if metaJSON != "" && metaJSON != "{}" {
+			_ = json.Unmarshal([]byte(metaJSON), &e.Metadata)
+		}
+		if e.Metadata == nil {
+			e.Metadata = make(map[string]any)
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }

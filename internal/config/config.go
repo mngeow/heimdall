@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -175,6 +176,13 @@ func (c *Config) Validate() error {
 	}
 	if len(c.Repos) == 0 {
 		return fmt.Errorf("HEIMDALL_REPOS must declare at least one repository")
+	}
+	if c.Server.PublicURL == "" {
+		return fmt.Errorf("HEIMDALL_SERVER_PUBLIC_URL must be set")
+	}
+	u, err := url.Parse(c.Server.PublicURL)
+	if err != nil || !u.IsAbs() {
+		return fmt.Errorf("HEIMDALL_SERVER_PUBLIC_URL must be a valid absolute URL, got %q", c.Server.PublicURL)
 	}
 
 	repoRefs := make(map[string]string, len(c.Repos))

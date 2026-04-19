@@ -94,7 +94,7 @@ func New(ctx context.Context) (*App, error) {
 		githubPoller:    github.NewPoller(githubClient, runtimeStore, cfg.GitHub.LookbackWindow),
 		workflowQueue:   queue,
 		router:          workflow.NewRouter(cfg.Repos),
-		commandIntake:   slashcmd.NewIntake(runtimeStore, queue, logger),
+		commandIntake:   slashcmd.NewIntake(runtimeStore, queue, logger, githubClient, cfg.Server.PublicURL),
 		activationFlow:  workflow.NewProposalWorkflow(runtimeStore, repoManager, githubClient, internalexec.NewOpenSpecClient(""), proposalRunner, logger),
 		prCommandWorker: prCmdWorker,
 		ready:           false,
@@ -217,7 +217,7 @@ func (a *App) pollGitHubOnce(ctx context.Context) error {
 			continue
 		}
 
-		outcome, err := a.commandIntake.Process(ctx, repoConfig, command.PullRequest, command.CommentNodeID, command.ActorLogin, command.Body)
+		outcome, err := a.commandIntake.Process(ctx, repoConfig, command.PullRequest, command.CommentNodeID, command.CommentID, command.ActorLogin, command.Body)
 		if err != nil {
 			return fmt.Errorf("failed to process github command for %s#%d: %w", command.RepoRef, command.PullRequest.Number, err)
 		}

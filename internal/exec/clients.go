@@ -292,33 +292,58 @@ func (c *OpenCodeClient) GetVersion(ctx context.Context) (string, error) {
 	return string(output), nil
 }
 
+// TimelineWriter receives display entries as they are parsed from the opencode event stream.
+type TimelineWriter interface {
+	WriteEntry(entryType, displayText string, metadata map[string]any) error
+}
+
+// DisplayEntry represents a normalized human-readable event from an opencode run.
+type DisplayEntry struct {
+	EntryType   string
+	DisplayText string
+	Metadata    map[string]any
+}
+
 // ExecutionOutcome represents the result of a non-interactive opencode run.
 type ExecutionOutcome struct {
 	Status    string // success, needs_input, needs_permission, error
 	Summary   string
 	RequestID string // populated when Status == needs_permission
 	SessionID string // populated when Status == needs_permission
+	Timeline  []DisplayEntry
 }
 
-// opencodeEvent is a minimal JSON event shape from `opencode run --format json`.
+// opencodeEvent is a JSON event shape from `opencode run --format json`.
 type opencodeEvent struct {
 	Type      string `json:"type"`
 	Timestamp int64  `json:"timestamp"`
 	SessionID string `json:"sessionID"`
 	Part      struct {
-		Type   string `json:"type"`
-		Tool   string `json:"tool,omitempty"`
-		CallID string `json:"callID,omitempty"`
-		State  struct {
-			Status string `json:"status"`
-			Input  struct {
-				Name string `json:"name,omitempty"`
-			} `json:"input,omitempty"`
-			Output string `json:"output,omitempty"`
-		} `json:"state,omitempty"`
+		Type      string `json:"type"`
+		Tool      string `json:"tool,omitempty"`
+		CallID    string `json:"callID,omitempty"`
 		ID        string `json:"id,omitempty"`
 		MessageID string `json:"messageID,omitempty"`
 		SessionID string `json:"sessionID,omitempty"`
+		Snapshot  string `json:"snapshot,omitempty"`
+		Reason    string `json:"reason,omitempty"`
+		Tokens    struct {
+			Total     int `json:"total"`
+			Input     int `json:"input"`
+			Output    int `json:"output"`
+			Reasoning int `json:"reasoning"`
+			Cache     struct {
+				Write int `json:"write"`
+				Read  int `json:"read"`
+			} `json:"cache"`
+		} `json:"tokens,omitempty"`
+		Cost  float64 `json:"cost,omitempty"`
+		State struct {
+			Status   string         `json:"status"`
+			Input    map[string]any `json:"input,omitempty"`
+			Output   string         `json:"output,omitempty"`
+			Metadata map[string]any `json:"metadata,omitempty"`
+		} `json:"state,omitempty"`
 	} `json:"part,omitempty"`
 	Properties struct {
 		ID         string   `json:"id,omitempty"`
@@ -331,9 +356,9 @@ type opencodeEvent struct {
 }
 
 // RunRefine runs a non-interactive refine command and classifies the outcome from JSON events.
-func (c *OpenCodeClient) RunRefine(ctx context.Context, agent, changeName, prompt string) (*ExecutionOutcome, error) {
+func (c *OpenCodeClient) RunRefine(ctx context.Context, agent, changeName, prompt string, writer TimelineWriter) (*ExecutionOutcome, error) {
 	msg := buildRunMessage("Refine OpenSpec change", changeName, prompt)
-	outcome, err := c.runWithJSONEvents(ctx, agent, msg)
+	outcome, err := c.runWithJSONEvents(ctx, agent, msg, writer)
 	if err != nil {
 		return nil, err
 	}
@@ -341,9 +366,9 @@ func (c *OpenCodeClient) RunRefine(ctx context.Context, agent, changeName, promp
 }
 
 // RunApply runs a non-interactive apply command and classifies the outcome from JSON events.
-func (c *OpenCodeClient) RunApply(ctx context.Context, agent, changeName, prompt string) (*ExecutionOutcome, error) {
+func (c *OpenCodeClient) RunApply(ctx context.Context, agent, changeName, prompt string, writer TimelineWriter) (*ExecutionOutcome, error) {
 	msg := buildRunMessage("Apply OpenSpec change", changeName, prompt)
-	outcome, err := c.runWithJSONEvents(ctx, agent, msg)
+	outcome, err := c.runWithJSONEvents(ctx, agent, msg, writer)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +387,7 @@ func buildRunMessage(prefix, changeName, prompt string) string {
 	return b.String()
 }
 
-func (c *OpenCodeClient) runWithJSONEvents(ctx context.Context, agent, message string) (*ExecutionOutcome, error) {
+func (c *OpenCodeClient) runWithJSONEvents(ctx context.Context, agent, message string, writer TimelineWriter) (*ExecutionOutcome, error) {
 	cmd := exec.CommandContext(ctx, "opencode", "run", "--agent", agent, "--format", "json", message)
 	cmd.Dir = c.worktreePath
 	stdout, err := cmd.StdoutPipe()
@@ -373,7 +398,7 @@ func (c *OpenCodeClient) runWithJSONEvents(ctx context.Context, agent, message s
 		return nil, fmt.Errorf("failed to start opencode: %w", err)
 	}
 
-	res, parseErr := parseOpencodeEvents(stdout)
+	res, parseErr := parseOpencodeEvents(stdout, writer)
 
 	waitErr := cmd.Wait()
 	if parseErr != nil {
@@ -390,9 +415,81 @@ type opencodeParseResult struct {
 	LastError string            // last observed generic error text (may be intermediate)
 	HasError  bool              // whether any generic error event was seen
 	Terminal  *ExecutionOutcome // terminal outcome if one was explicitly found
+	Timeline  []DisplayEntry
 }
 
-func parseOpencodeEvents(r io.Reader) (*opencodeParseResult, error) {
+// normalizeOpencodeEvent maps a structured opencode event to a rich display entry.
+// It extracts detailed metadata so the dashboard can render tool inputs, outputs,
+// token counts, and execution metadata.
+func normalizeOpencodeEvent(ev opencodeEvent) (entryType, displayText string, metadata map[string]any) {
+	switch ev.Type {
+	case "text":
+		return "text", ev.Part.State.Output, nil
+	case "tool_use":
+		tool := ev.Part.Tool
+		status := ev.Part.State.Status
+		meta := map[string]any{
+			"tool":     tool,
+			"status":   status,
+			"call_id":  ev.Part.CallID,
+			"input":    ev.Part.State.Input,
+			"output":   ev.Part.State.Output,
+			"metadata": ev.Part.State.Metadata,
+		}
+		if tool == "permission" && status == "pending" {
+			meta["blocker_type"] = "permission"
+			return "blocker", "Blocked on permission request", meta
+		}
+		if tool != "" {
+			return "tool_use", tool, meta
+		}
+		return "generic", "tool event", meta
+	case "step_start":
+		return "step_start", "Step started", map[string]any{
+			"snapshot":   ev.Part.Snapshot,
+			"message_id": ev.Part.MessageID,
+		}
+	case "step_finish":
+		meta := map[string]any{
+			"reason": ev.Part.Reason,
+		}
+		if ev.Part.Tokens.Total > 0 {
+			meta["tokens"] = map[string]any{
+				"total":     ev.Part.Tokens.Total,
+				"input":     ev.Part.Tokens.Input,
+				"output":    ev.Part.Tokens.Output,
+				"reasoning": ev.Part.Tokens.Reasoning,
+				"cache": map[string]any{
+					"write": ev.Part.Tokens.Cache.Write,
+					"read":  ev.Part.Tokens.Cache.Read,
+				},
+			}
+		}
+		if ev.Part.Cost > 0 {
+			meta["cost"] = ev.Part.Cost
+		}
+		return "step_finish", "Step completed", meta
+	case "permission.asked":
+		reqID := ev.Properties.RequestID
+		if reqID == "" {
+			reqID = ev.Properties.ID
+		}
+		return "blocker", "Blocked on permission request", map[string]any{
+			"request_id":   reqID,
+			"blocker_type": "permission",
+		}
+	case "question.asked", "input.requested":
+		return "blocker", "Blocked: needs clarification input", map[string]any{
+			"blocker_type": "input",
+		}
+	case "error":
+		return "error", ev.Part.State.Output, map[string]any{"severity": "error"}
+	default:
+		return "generic", fmt.Sprintf("Event: %s", ev.Type), map[string]any{"raw_type": ev.Type}
+	}
+}
+
+func parseOpencodeEvents(r io.Reader, writer TimelineWriter) (*opencodeParseResult, error) {
 	reader := bufio.NewReader(r)
 	res := &opencodeParseResult{}
 	for {
@@ -420,6 +517,22 @@ func parseOpencodeEvents(r io.Reader) (*opencodeParseResult, error) {
 			}
 			if ev.Type == "step_start" && ev.Part.SessionID != "" {
 				res.SessionID = ev.Part.SessionID
+			}
+			// Normalize every structured event into a display entry.
+			entryType, displayText, meta := normalizeOpencodeEvent(ev)
+			entry := DisplayEntry{
+				EntryType:   entryType,
+				DisplayText: displayText,
+				Metadata:    meta,
+			}
+			res.Timeline = append(res.Timeline, entry)
+			// Stream the entry to the writer if provided.
+			if writer != nil {
+				if writeErr := writer.WriteEntry(entryType, displayText, meta); writeErr != nil {
+					// Log the error but continue parsing so the run outcome is still classified.
+					// The writer error should not break the opencode run.
+					fmt.Printf("timeline writer error: %v\n", writeErr)
+				}
 			}
 			// Detect permission.asked events — immediate blocker
 			if ev.Type == "permission.asked" || (ev.Type == "tool_use" && ev.Part.Tool == "permission" && ev.Part.State.Status == "pending") {
@@ -474,10 +587,12 @@ func resolveOutcome(res *opencodeParseResult, waitErr error) *ExecutionOutcome {
 	}
 	// Blockers are terminal regardless of later events or exit code.
 	if res.Blocker != nil {
+		res.Blocker.Timeline = res.Timeline
 		return res.Blocker
 	}
 	// Terminal success from explicit completion event.
 	if res.Terminal != nil {
+		res.Terminal.Timeline = res.Timeline
 		return res.Terminal
 	}
 	// Process exited with error and no terminal success was observed.
@@ -488,25 +603,36 @@ func resolveOutcome(res *opencodeParseResult, waitErr error) *ExecutionOutcome {
 		} else if waitErr.Error() != "" {
 			summary = fmt.Sprintf("opencode exited with error: %v", waitErr)
 		}
-		return &ExecutionOutcome{Status: "error", Summary: summary, SessionID: res.SessionID}
+		return &ExecutionOutcome{Status: "error", Summary: summary, SessionID: res.SessionID, Timeline: res.Timeline}
 	}
 	// No explicit terminal event but process succeeded — default to success.
-	return &ExecutionOutcome{Status: "success", Summary: "completed", SessionID: res.SessionID}
+	return &ExecutionOutcome{Status: "success", Summary: "completed", SessionID: res.SessionID, Timeline: res.Timeline}
 }
 
 // RunGeneric runs a non-interactive generic opencode command alias and classifies the outcome.
-func (c *OpenCodeClient) RunGeneric(ctx context.Context, agent, command, prompt string) error {
-	args := []string{"run", "--agent", agent, "--command", command}
+func (c *OpenCodeClient) RunGeneric(ctx context.Context, agent, command, prompt string, writer TimelineWriter) (*ExecutionOutcome, error) {
+	args := []string{"run", "--agent", agent, "--command", command, "--format", "json"}
 	if prompt != "" {
 		args = append(args, prompt)
 	}
 	cmd := exec.CommandContext(ctx, "opencode", args...)
 	cmd.Dir = c.worktreePath
-	output, err := cmd.CombinedOutput()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("opencode generic command failed: %w (output: %s)", err, string(output))
+		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
-	return nil
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start opencode: %w", err)
+	}
+
+	res, parseErr := parseOpencodeEvents(stdout, writer)
+
+	waitErr := cmd.Wait()
+	if parseErr != nil {
+		return nil, parseErr
+	}
+
+	return resolveOutcome(res, waitErr), nil
 }
 
 // ReplyPermission sends a one-time approval reply to a pending opencode permission request.

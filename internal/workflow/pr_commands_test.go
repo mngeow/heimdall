@@ -70,7 +70,7 @@ type recordingFakeExecClient struct {
 	resumeCalls  []string
 }
 
-func (f *recordingFakeExecClient) RunRefine(_ context.Context, agent, changeName, prompt string) (*exec.ExecutionOutcome, error) {
+func (f *recordingFakeExecClient) RunRefine(_ context.Context, agent, changeName, prompt string, _ exec.TimelineWriter) (*exec.ExecutionOutcome, error) {
 	f.refineCalls = append(f.refineCalls, struct{ agent, changeName, prompt string }{agent, changeName, prompt})
 	if f.refineErr != nil {
 		return nil, f.refineErr
@@ -80,7 +80,7 @@ func (f *recordingFakeExecClient) RunRefine(_ context.Context, agent, changeName
 	}
 	return &exec.ExecutionOutcome{Status: "success", Summary: "refine completed"}, nil
 }
-func (f *recordingFakeExecClient) RunApply(_ context.Context, agent, changeName, prompt string) (*exec.ExecutionOutcome, error) {
+func (f *recordingFakeExecClient) RunApply(_ context.Context, agent, changeName, prompt string, _ exec.TimelineWriter) (*exec.ExecutionOutcome, error) {
 	f.applyCalls = append(f.applyCalls, struct{ agent, changeName, prompt string }{agent, changeName, prompt})
 	if f.applyErr != nil {
 		return nil, f.applyErr
@@ -90,9 +90,12 @@ func (f *recordingFakeExecClient) RunApply(_ context.Context, agent, changeName,
 	}
 	return &exec.ExecutionOutcome{Status: "success", Summary: "apply completed"}, nil
 }
-func (f *recordingFakeExecClient) RunGeneric(_ context.Context, agent, command, prompt string) error {
+func (f *recordingFakeExecClient) RunGeneric(_ context.Context, agent, command, prompt string, _ exec.TimelineWriter) (*exec.ExecutionOutcome, error) {
 	f.genericCalls = append(f.genericCalls, struct{ agent, command, prompt string }{agent, command, prompt})
-	return f.genericErr
+	if f.genericErr != nil {
+		return nil, f.genericErr
+	}
+	return &exec.ExecutionOutcome{Status: "success", Summary: "generic completed"}, nil
 }
 func (f *recordingFakeExecClient) ReplyPermission(_ context.Context, requestID, sessionID string) error {
 	f.replyCalls = append(f.replyCalls, struct{ requestID, sessionID string }{requestID, sessionID})
