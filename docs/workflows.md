@@ -63,10 +63,13 @@ All PR-comment commands, including `/heimdall status`, follow the same execution
 3. Heimdall checks that the commenter is allowed to issue commands.
 4. Heimdall deduplicates the command by comment node id or another stable comment identity.
 5. Heimdall saves the command request and enqueues a PR-command job.
-6. The PR-command worker dequeues the job and loads the persisted command request, pull request, and repository by their durable stored IDs.
-7. The worker dispatches the job to the matching executor, executes it, and posts a PR reply if applicable.
-8. The worker updates the command request and job state to completed, blocked, or failed.
-9. Duplicate later poll observations of the same comment are ignored and must not produce additional outcomes.
+6. For accepted non-duplicate commands, Heimdall posts an `eyes` reaction on the comment. For accepted opencode-backed commands, it also posts a PR reply with a link to the command-run detail page in the operator dashboard.
+7. The PR-command worker dequeues the job and loads the persisted command request, pull request, and repository by their durable stored IDs.
+8. For opencode-backed commands, the worker creates a `command_run` record with explicit state transitions: `queued` → `starting` → `running` → terminal (`completed`, `failed`, or `blocked`).
+9. The worker dispatches the job to the matching executor, executes it, and posts a PR reply if applicable.
+10. The opencode execution adapter parses the structured JSON event stream, captures the canonical `sessionID` from the first event, normalizes events into human-readable timeline entries, and persists them to the command run timeline.
+11. The worker updates the command request and job state to completed, blocked, or failed.
+12. Duplicate later poll observations of the same comment are ignored and must not produce additional outcomes or duplicate feedback.
 
 This model keeps polling fast and deterministic while executing commands asynchronously through a single background worker loop.
 
@@ -121,11 +124,12 @@ Processing steps:
 9. The worker asks OpenSpec for apply instructions in the prepared worktree.
 10. If the change is blocked, the worker comments back with the reason instead of guessing.
 11. The worker runs the apply executor with the selected agent in the same prepared worktree.
-12. The worker captures the opencode `sessionID` from the first structured event and persists it with the command request for later retries and debugging.
-13. The worker classifies the terminal outcome from the final session evidence rather than from the first intermediate generic error event, and ensures true failures always surface a non-empty summary instead of a blank message.
-14. The worker commits task-file updates and code changes together.
-15. The worker pushes the branch.
-16. The worker comments back with completed tasks, remaining tasks, or blockers.
+12. The worker captures the opencode `sessionID` from the first structured event and persists it with the command request and command run for later retries and debugging.
+13. The opencode adapter normalizes structured JSON events into sanitized display entries using an explicit mapping: text events become rendered output blocks, tool and step events become concise status lines, blocker events become highlighted notices, and terminal events become completion or failure summaries. Unknown but valid event types fall back to a compact generic status entry instead of raw JSON.
+14. The worker classifies the terminal outcome from the final session evidence rather than from the first intermediate generic error event, and ensures true failures always surface a non-empty summary instead of a blank message.
+15. The worker commits task-file updates and code changes together.
+16. The worker pushes the branch.
+17. The worker comments back with completed tasks, remaining tasks, or blockers.
 
 ## Workflow 4: Archive From A PR Comment
 

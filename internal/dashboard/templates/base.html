@@ -31,6 +31,17 @@
     .timeline { list-style: none; padding: 0; margin: 0; }
     .timeline li { padding: 12px 0; border-bottom: 1px solid #21262d; }
     .timeline .meta { color: #8b949e; font-size: 12px; }
+    .terminal-banner { padding: 16px; border-radius: 10px; margin-bottom: 24px; font-weight: 600; }
+    .status-completed { background: #238636; color: #fff; }
+    .status-failed { background: #da3633; color: #fff; }
+    .status-blocked { background: #9e8c6c; color: #fff; }
+    .status-running { background: #1f6feb; color: #fff; }
+    .status-starting { background: #8957e5; color: #fff; }
+    .status-queued { background: #30363d; color: #c9d1d9; }
+    .entry-type-blocker { color: #f0883e; }
+    .entry-type-terminal { color: #3fb950; font-weight: 600; }
+    .entry-type-tool_status { color: #58a6ff; }
+    .entry-type-error { color: #f85149; }
   </style>
 </head>
 <body>
@@ -39,6 +50,7 @@
       <a href="/ui">Overview</a>
       <a href="/ui/work-items">Work Items</a>
       <a href="/ui/pull-requests">Pull Requests</a>
+      <a href="/ui/command-runs">Command Runs</a>
     </nav>
     {{template "content" .}}
   </div>

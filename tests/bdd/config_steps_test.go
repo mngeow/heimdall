@@ -202,6 +202,7 @@ func validConfigurationDotenv(baseBranch string) string {
 func multiRepositoryDotenv() string {
 	return strings.Join([]string{
 		"HEIMDALL_SERVER_LISTEN_ADDRESS=:8080",
+		"HEIMDALL_SERVER_PUBLIC_URL=http://127.0.0.1:8080",
 		"HEIMDALL_STORAGE_DRIVER=sqlite",
 		"HEIMDALL_STORAGE_DSN=/tmp/heimdall.db",
 		"HEIMDALL_LINEAR_POLL_INTERVAL=30s",

@@ -1,7 +1,7 @@
 ---
 description: Implements OpenSpec-defined changes for /opsx-apply and keeps task progress current
 mode: primary
-model: kimi-for-coding/kimi-k2-thinking
+model: kimi-for-coding/K2.6-code-preview
 temperature: 1.0
 permission:
   edit: allow

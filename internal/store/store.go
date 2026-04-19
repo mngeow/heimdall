@@ -212,10 +212,34 @@ func (s *Store) Migrate(ctx context.Context) error {
 			FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id),
 			FOREIGN KEY (command_request_id) REFERENCES command_requests(id)
 		);`,
+		`CREATE TABLE IF NOT EXISTS command_runs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			command_request_id INTEGER NOT NULL UNIQUE,
+			session_id TEXT,
+			status TEXT NOT NULL,
+			status_reason TEXT,
+			terminal_summary TEXT,
+			started_at DATETIME,
+			completed_at DATETIME,
+			FOREIGN KEY (command_request_id) REFERENCES command_requests(id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS command_timeline_entries (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			command_run_id INTEGER NOT NULL,
+			sequence INTEGER NOT NULL,
+			entry_type TEXT NOT NULL,
+			display_text TEXT NOT NULL,
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (command_run_id) REFERENCES command_runs(id),
+			UNIQUE(command_run_id, sequence)
+		);`,
 		`CREATE INDEX IF NOT EXISTS idx_work_items_key ON work_items(provider, work_item_key);`,
 		`CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(work_item_id, status);`,
 		`CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, run_after);`,
 		`CREATE INDEX IF NOT EXISTS idx_jobs_lock ON jobs(lock_key);`,
+		`CREATE INDEX IF NOT EXISTS idx_command_runs_status ON command_runs(status);`,
+		`CREATE INDEX IF NOT EXISTS idx_command_timeline_entries_run ON command_timeline_entries(command_run_id, sequence);`,
 	}
 
 	for _, migration := range migrations {
@@ -232,6 +256,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`ALTER TABLE command_requests ADD COLUMN session_id TEXT`,
 		`ALTER TABLE repositories ADD COLUMN pr_monitor_label TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE repositories ADD COLUMN default_spec_writing_agent TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE command_requests ADD COLUMN feedback_reaction_posted INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE command_requests ADD COLUMN feedback_link_posted INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, migration := range columnMigrations {
 		if err := s.execOptionalMigration(ctx, migration); err != nil {

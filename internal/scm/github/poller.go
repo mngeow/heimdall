@@ -36,6 +36,7 @@ type DiscoveredCommand struct {
 	RepoRef       string
 	PullRequest   *store.PullRequest
 	CommentNodeID string
+	CommentID     int64
 	ActorLogin    string
 	Body          string
 	CreatedAt     time.Time
@@ -160,6 +161,7 @@ func (p *Poller) pollRepository(ctx context.Context, repository store.Repository
 				RepoRef:       repository.RepoRef,
 				PullRequest:   managedPR,
 				CommentNodeID: commentIdentity(comment),
+				CommentID:     comment.GetID(),
 				ActorLogin:    comment.GetUser().GetLogin(),
 				Body:          comment.GetBody(),
 				CreatedAt:     comment.GetCreatedAt().Time,

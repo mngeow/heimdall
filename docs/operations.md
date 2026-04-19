@@ -82,7 +82,7 @@ Notes:
 - if multiple repos are configured, routing rules should be explicit and validated at startup
 - `HEIMDALL_REPO_<ID>_DEFAULT_SPEC_WRITING_AGENT` is required for each managed repository and is used for activation-triggered proposal generation and `/heimdall refine`
 - GitHub polling should be scoped to managed repositories and managed pull requests to control API volume
-- `public_url` does not need to be Internet-reachable when GitHub polling is used; a private or local operator URL is enough if the field is needed at all
+- `HEIMDALL_SERVER_PUBLIC_URL` is required and must be a valid absolute URL. It is used to build dashboard links posted back into GitHub PR comments for accepted opencode-backed commands.
 - use file-path settings such as `HEIMDALL_GITHUB_PRIVATE_KEY_FILE` when multiline secrets should stay outside the `.env` file
 
 ## Health And Observability
@@ -103,6 +103,8 @@ Heimdall serves a small embedded dashboard from the same Go binary:
 - `/ui/work-items` — filterable queue of all tracked Linear work items with status, lifecycle bucket, and latest run context
 - `/ui/pull-requests` — list of active Heimdall-managed pull requests
 - `/ui/pull-requests/{id}` — detail view showing the linked work item, binding, and Heimdall-tracked command/activity history
+- `/ui/command-runs` — list of active opencode-backed command runs with repository, PR, actor, status, and session context
+- `/ui/command-runs/{commandRequestID}` — detail view showing the command run status, session ID, and a live human-readable timeline. HTMX refreshes the timeline fragment while the command is non-terminal. Terminal states (`completed`, `failed`, `blocked`) are rendered prominently with status indicators and summaries.
 
 The dashboard is server-rendered HTML with HTMX-driven partial updates. It is read-only and does not expose secrets, installation tokens, provider credentials, or raw payloads. Because it is served from the same HTTP listener, keep the listen address private (for example, `127.0.0.1:8080` or a local network interface) unless you intentionally want to expose it.
 

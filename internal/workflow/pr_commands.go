@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/mngeow/heimdall/internal/exec"
 	"github.com/mngeow/heimdall/internal/store"
@@ -31,6 +32,7 @@ type ExecutionRequest struct {
 	WorktreePath      string
 	RequestID         string
 	CommandRequestID  int64
+	CommandRunID      int64
 }
 
 type prCommandRepoManager interface {
@@ -56,7 +58,7 @@ type prCommandExecClient interface {
 	SetWorktreePath(string)
 	RunRefine(ctx context.Context, agent, changeName, prompt string) (*exec.ExecutionOutcome, error)
 	RunApply(ctx context.Context, agent, changeName, prompt string) (*exec.ExecutionOutcome, error)
-	RunGeneric(ctx context.Context, agent, command, prompt string) error
+	RunGeneric(ctx context.Context, agent, command, prompt string) (*exec.ExecutionOutcome, error)
 	ReplyPermission(ctx context.Context, requestID, sessionID string) error
 	ResumeSession(ctx context.Context, sessionID string) (*exec.ExecutionOutcome, error)
 }
@@ -178,8 +180,15 @@ func (e *PRCommandExecutor) ExecuteRefine(ctx context.Context, req ExecutionRequ
 
 	e.exec.SetWorktreePath(worktreePath)
 
+	if req.CommandRunID != 0 {
+		_ = e.store.UpdateCommandRunStatus(ctx, req.CommandRunID, "running", "")
+	}
+
 	outcome, err := e.exec.RunRefine(ctx, req.Agent, changeName, req.PromptTail)
 	if err != nil {
+		if req.CommandRunID != 0 {
+			_ = e.store.CompleteCommandRun(ctx, req.CommandRunID, "failed", err.Error())
+		}
 		return fmt.Errorf("refine failed: %w", err)
 	}
 
@@ -190,6 +199,19 @@ func (e *PRCommandExecutor) ExecuteRefine(ctx context.Context, req ExecutionRequ
 			_ = e.store.SaveCommandRequest(ctx, r)
 		}
 		logger = logger.With("session_id", outcome.SessionID)
+	}
+	if req.CommandRunID != 0 {
+		if outcome.SessionID != "" {
+			_ = e.store.UpdateCommandRunSessionID(ctx, req.CommandRunID, outcome.SessionID)
+		}
+		e.persistTimeline(ctx, req.CommandRunID, outcome.Timeline)
+		status := outcome.Status
+		if status == "success" {
+			status = "completed"
+		} else if status != "blocked" {
+			status = "failed"
+		}
+		_ = e.store.CompleteCommandRun(ctx, req.CommandRunID, status, outcome.Summary)
 	}
 
 	switch outcome.Status {
@@ -229,8 +251,15 @@ func (e *PRCommandExecutor) ExecuteApply(ctx context.Context, req ExecutionReque
 
 	e.exec.SetWorktreePath(worktreePath)
 
+	if req.CommandRunID != 0 {
+		_ = e.store.UpdateCommandRunStatus(ctx, req.CommandRunID, "running", "")
+	}
+
 	outcome, err := e.exec.RunApply(ctx, req.Agent, changeName, req.PromptTail)
 	if err != nil {
+		if req.CommandRunID != 0 {
+			_ = e.store.CompleteCommandRun(ctx, req.CommandRunID, "failed", err.Error())
+		}
 		return fmt.Errorf("apply failed: %w", err)
 	}
 
@@ -241,6 +270,19 @@ func (e *PRCommandExecutor) ExecuteApply(ctx context.Context, req ExecutionReque
 			_ = e.store.SaveCommandRequest(ctx, r)
 		}
 		logger = logger.With("session_id", outcome.SessionID)
+	}
+	if req.CommandRunID != 0 {
+		if outcome.SessionID != "" {
+			_ = e.store.UpdateCommandRunSessionID(ctx, req.CommandRunID, outcome.SessionID)
+		}
+		e.persistTimeline(ctx, req.CommandRunID, outcome.Timeline)
+		status := outcome.Status
+		if status == "success" {
+			status = "completed"
+		} else if status != "blocked" {
+			status = "failed"
+		}
+		_ = e.store.CompleteCommandRun(ctx, req.CommandRunID, status, outcome.Summary)
 	}
 
 	switch outcome.Status {
@@ -280,11 +322,49 @@ func (e *PRCommandExecutor) ExecuteOpencode(ctx context.Context, req ExecutionRe
 
 	e.exec.SetWorktreePath(worktreePath)
 
-	if err := e.exec.RunGeneric(ctx, req.Agent, req.Alias, req.PromptTail); err != nil {
+	if req.CommandRunID != 0 {
+		_ = e.store.UpdateCommandRunStatus(ctx, req.CommandRunID, "running", "")
+	}
+
+	outcome, err := e.exec.RunGeneric(ctx, req.Agent, req.Alias, req.PromptTail)
+	if err != nil {
+		if req.CommandRunID != 0 {
+			_ = e.store.CompleteCommandRun(ctx, req.CommandRunID, "failed", err.Error())
+		}
 		return fmt.Errorf("opencode command %s failed: %w", req.Alias, err)
 	}
 
-	return e.commitAndPushOutcome(ctx, pr, repo, "opencode", changeName, req.Agent, &exec.ExecutionOutcome{Status: "success", Summary: "opencode completed"})
+	if outcome.SessionID != "" && req.CommandRequestID != 0 {
+		if r, err := e.store.GetCommandRequestByID(ctx, req.CommandRequestID); err == nil && r != nil {
+			r.SessionID = outcome.SessionID
+			_ = e.store.SaveCommandRequest(ctx, r)
+		}
+	}
+	if req.CommandRunID != 0 {
+		e.persistTimeline(ctx, req.CommandRunID, outcome.Timeline)
+		status := outcome.Status
+		if status == "success" {
+			status = "completed"
+		} else if status != "blocked" {
+			status = "failed"
+		}
+		_ = e.store.CompleteCommandRun(ctx, req.CommandRunID, status, outcome.Summary)
+	}
+
+	switch outcome.Status {
+	case "success":
+		return e.commitAndPushOutcome(ctx, pr, repo, "opencode", changeName, req.Agent, outcome)
+	case "needs_input":
+		return e.commentResult(ctx, pr, repo, "Opencode blocked: needs clarification input. Retry with a more specific prompt.")
+	case "needs_permission":
+		return e.handleBlockedPermission(ctx, req, pr, repo, outcome)
+	default:
+		summary := outcome.Summary
+		if summary == "" {
+			summary = "opencode execution failed without a detailed error message"
+		}
+		return fmt.Errorf("opencode failed: %s", summary)
+	}
 }
 
 // ExecuteApprove approves a pending permission request and resumes execution.
@@ -377,6 +457,31 @@ func (e *PRCommandExecutor) handleBlockedPermission(ctx context.Context, req Exe
 	}
 	msg := fmt.Sprintf("Command blocked on permission request `%s`.\nApprove with: `/heimdall approve %s`", outcome.RequestID, outcome.RequestID)
 	return e.commentResult(ctx, pr, repo, msg)
+}
+
+func (e *PRCommandExecutor) persistTimeline(ctx context.Context, commandRunID int64, timeline []exec.DisplayEntry) {
+	if commandRunID == 0 || len(timeline) == 0 {
+		return
+	}
+	seq, err := e.store.GetNextTimelineSequence(ctx, commandRunID)
+	if err != nil {
+		e.logger.Error("failed to get timeline sequence", "command_run_id", commandRunID, "error", err)
+		return
+	}
+	for _, entry := range timeline {
+		if err := e.store.AppendTimelineEntry(ctx, &store.CommandTimelineEntry{
+			CommandRunID: commandRunID,
+			Sequence:     seq,
+			EntryType:    entry.EntryType,
+			DisplayText:  entry.DisplayText,
+			Metadata:     entry.Metadata,
+			CreatedAt:    time.Now(),
+		}); err != nil {
+			e.logger.Error("failed to append timeline entry", "command_run_id", commandRunID, "error", err)
+			return
+		}
+		seq++
+	}
 }
 
 func (e *PRCommandExecutor) commentResult(ctx context.Context, pr *store.PullRequest, repo *store.Repository, message string) error {

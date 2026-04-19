@@ -3,6 +3,7 @@ package bdd
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/cucumber/godog"
 	"github.com/mngeow/heimdall/internal/board/linear"
 	"github.com/mngeow/heimdall/internal/config"
+	"github.com/mngeow/heimdall/internal/dashboard"
 	"github.com/mngeow/heimdall/internal/exec"
 	"github.com/mngeow/heimdall/internal/slashcmd"
 	"github.com/mngeow/heimdall/internal/store"
@@ -21,52 +23,55 @@ import (
 
 // testContext holds the state for each scenario
 type testContext struct {
-	config             *config.Config
-	configLoadErr      error
-	store              *store.Store
-	queue              *store.JobQueue
-	intake             *slashcmd.Intake
-	workItem           *store.WorkItem
-	pr                 *store.PullRequest
-	repoBinding        *store.RepoBinding
-	workflowRun        *store.WorkflowRun
-	command            string
-	commandResult      string
-	pendingComment     string
-	pendingActor       string
-	pendingCommentID   string
-	lastPollResult     *slashcmd.ProcessResult
-	authorizer         *slashcmd.Authorizer
-	parser             *slashcmd.Parser
-	prCommandWorker    *workflow.PRCommandWorker
-	isAuthorized       bool
-	isRejected         bool
-	pollObserved       bool
-	workflowQueued     bool
-	duplicateSeen      bool
-	publicWebhook      bool
-	rejectionReason    string
-	bootstrapNoChanges bool
-	prBody             string
-	logOutput          string
-	bootstrapPrompt    string
-	changeName         string
-	prLabels           []string
-	repositoryLabels   []string
-	projectRoot        string
-	envSnapshot        map[string]envState
-	linearPollResult   *linear.PollResult
-	linearPollErr      error
-	linearActivated    []linear.WorkItem
-	linearProvider     *linear.Provider
-	linearRequests     []string
-	linearCheckpoint   string
-	linearCleanup      func()
-	dashboardServer    *httptest.Server
-	dashboardResponse  *http.Response
-	dashboardBody      string
-	dashboardPR        *store.PullRequest
-	dashboardBinding   *store.RepoBinding
+	config              *config.Config
+	configLoadErr       error
+	store               *store.Store
+	queue               *store.JobQueue
+	intake              *slashcmd.Intake
+	githubClient        *fakeGitHubClientForBDD
+	workItem            *store.WorkItem
+	pr                  *store.PullRequest
+	repoBinding         *store.RepoBinding
+	workflowRun         *store.WorkflowRun
+	command             string
+	commandResult       string
+	pendingComment      string
+	pendingActor        string
+	pendingCommentID    string
+	lastPollResult      *slashcmd.ProcessResult
+	authorizer          *slashcmd.Authorizer
+	parser              *slashcmd.Parser
+	prCommandWorker     *workflow.PRCommandWorker
+	isAuthorized        bool
+	isRejected          bool
+	pollObserved        bool
+	workflowQueued      bool
+	duplicateSeen       bool
+	publicWebhook       bool
+	rejectionReason     string
+	bootstrapNoChanges  bool
+	reactionCountAtPoll int
+	commentCountAtPoll  int
+	prBody              string
+	logOutput           string
+	bootstrapPrompt     string
+	changeName          string
+	prLabels            []string
+	repositoryLabels    []string
+	projectRoot         string
+	envSnapshot         map[string]envState
+	linearPollResult    *linear.PollResult
+	linearPollErr       error
+	linearActivated     []linear.WorkItem
+	linearProvider      *linear.Provider
+	linearRequests      []string
+	linearCheckpoint    string
+	linearCleanup       func()
+	dashboardServer     *httptest.Server
+	dashboardResponse   *http.Response
+	dashboardBody       string
+	dashboardPR         *store.PullRequest
+	dashboardBinding    *store.RepoBinding
 }
 
 type envState struct {
@@ -74,13 +79,25 @@ type envState struct {
 	present bool
 }
 
-type fakeGitHubClientForBDD struct{ comments []string }
+type fakeGitHubClientForBDD struct {
+	comments  []string
+	reactions []fakeReaction
+}
+
+type fakeReaction struct {
+	CommentID int64
+	Content   string
+}
 
 func (f *fakeGitHubClientForBDD) GetInstallationToken(_ context.Context) (string, error) {
 	return "fake-token", nil
 }
 func (f *fakeGitHubClientForBDD) CreateComment(_ context.Context, owner, repo string, number int, body string) error {
 	f.comments = append(f.comments, body)
+	return nil
+}
+func (f *fakeGitHubClientForBDD) AddReaction(_ context.Context, owner, repo string, commentID int64, content string) error {
+	f.reactions = append(f.reactions, fakeReaction{CommentID: commentID, Content: content})
 	return nil
 }
 
@@ -108,7 +125,9 @@ func (f *fakeExecClientForBDD) RunRefine(_ context.Context, _, _, _ string) (*ex
 func (f *fakeExecClientForBDD) RunApply(_ context.Context, _, _, _ string) (*exec.ExecutionOutcome, error) {
 	return &exec.ExecutionOutcome{Status: "success", Summary: "apply completed"}, nil
 }
-func (f *fakeExecClientForBDD) RunGeneric(_ context.Context, _, _, _ string) error   { return nil }
+func (f *fakeExecClientForBDD) RunGeneric(_ context.Context, _, _, _ string) (*exec.ExecutionOutcome, error) {
+	return &exec.ExecutionOutcome{Status: "success", Summary: "generic completed"}, nil
+}
 func (f *fakeExecClientForBDD) ReplyPermission(_ context.Context, _, _ string) error { return nil }
 func (f *fakeExecClientForBDD) ResumeSession(_ context.Context, _ string) (*exec.ExecutionOutcome, error) {
 	return &exec.ExecutionOutcome{Status: "success", Summary: "resumed session completed"}, nil
@@ -144,12 +163,14 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 			return ctx, err
 		}
 		queue := store.NewJobQueue(runtimeStore)
-		ex := workflow.NewPRCommandExecutor(runtimeStore, &fakeRepoManagerForBDD{}, &fakeGitHubClientForBDD{}, nil, &fakeExecClientForBDD{}, nil)
+		ghClient := &fakeGitHubClientForBDD{}
+		ex := workflow.NewPRCommandExecutor(runtimeStore, &fakeRepoManagerForBDD{}, ghClient, nil, &fakeExecClientForBDD{}, nil)
 		wkr := workflow.NewPRCommandWorker(queue, ex, nil)
 		tc := &testContext{
 			store:           runtimeStore,
 			queue:           queue,
-			intake:          slashcmd.NewIntake(runtimeStore, queue, nil),
+			githubClient:    ghClient,
+			intake:          slashcmd.NewIntake(runtimeStore, queue, nil, ghClient, "https://example.com"),
 			parser:          slashcmd.NewParser(nil),
 			prCommandWorker: wkr,
 			pendingActor:    "testuser",
@@ -317,6 +338,22 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^Heimdall should resolve the change only from the pull request's own repository context$`, heimdallShouldResolveTheChangeOnlyFromThePullRequestsOwnRepositoryContext)
 	sc.Step(`^Heimdall should run opencode in the same prepared worktree$`, heimdallShouldRunOpencodeInTheSamePreparedWorktree)
 	sc.Step(`^opencode emits a large text event before the final outcome$`, opencodeEmitsLargeTextEvent)
+
+	// Accepted-command feedback steps
+	sc.Step(`^Heimdall should add an eyes reaction to the comment$`, heimdallShouldAddEyesReaction)
+	sc.Step(`^Heimdall should post a comment with a live-output dashboard link$`, heimdallShouldPostLiveOutputLink)
+	sc.Step(`^Heimdall should not post a live-output link comment$`, heimdallShouldNotPostLiveOutputLink)
+	sc.Step(`^Heimdall should not add an eyes reaction$`, heimdallShouldNotAddEyesReaction)
+
+	// Command-run dashboard steps
+	sc.Step(`^a command run exists for an accepted opencode-backed command$`, commandRunExistsForAcceptedCommand)
+	sc.Step(`^the command run has timeline entries$`, commandRunHasTimelineEntries)
+	sc.Step(`^the operator requests the active command-run list$`, operatorRequestsActiveCommandRunList)
+	sc.Step(`^the operator requests the command run detail view$`, operatorRequestsCommandRunDetailView)
+	sc.Step(`^the list should include the command run with status "([^"]*)"$`, listShouldIncludeCommandRunWithStatus)
+	sc.Step(`^the list should link to the command run detail page$`, listShouldLinkToCommandRunDetail)
+	sc.Step(`^the detail view should show the command run status$`, detailViewShouldShowCommandRunStatus)
+	sc.Step(`^the detail view should show the live output timeline$`, detailViewShouldShowLiveOutputTimeline)
 
 	registerConfigurationSteps(sc)
 	registerLinearPollingSteps(sc)
@@ -816,7 +853,9 @@ func heimdallPollsGitHub(ctx context.Context) error {
 		return nil
 	}
 
-	result, err := tc.intake.Process(ctx, tc.config.Repos[0], tc.pr, tc.pendingCommentID, tc.pendingActor, tc.pendingComment)
+	tc.reactionCountAtPoll = len(tc.githubClient.reactions)
+	tc.commentCountAtPoll = len(tc.githubClient.comments)
+	result, err := tc.intake.Process(ctx, tc.config.Repos[0], tc.pr, tc.pendingCommentID, 0, tc.pendingActor, tc.pendingComment)
 	if err != nil {
 		return err
 	}
@@ -1559,5 +1598,217 @@ func heimdallShouldPersistThatChangeNameInTheRepositoryBinding(ctx context.Conte
 func opencodeEmitsLargeTextEvent(ctx context.Context) error {
 	// The fake exec client used in BDD always returns success outcomes.
 	// Real large-event parsing is tested at the exec adapter layer.
+	return nil
+}
+
+// Accepted-command feedback step implementations
+
+func heimdallShouldAddEyesReaction(ctx context.Context) error {
+	tc := getTC(ctx)
+	for _, r := range tc.githubClient.reactions {
+		if r.Content == "eyes" {
+			return nil
+		}
+	}
+	return fmt.Errorf("expected an eyes reaction to be posted")
+}
+
+func heimdallShouldPostLiveOutputLink(ctx context.Context) error {
+	tc := getTC(ctx)
+	for _, c := range tc.githubClient.comments {
+		if strings.Contains(c, "View live output") && strings.Contains(c, "/ui/command-runs/") {
+			return nil
+		}
+	}
+	return fmt.Errorf("expected a live-output link comment to be posted")
+}
+
+func heimdallShouldNotPostLiveOutputLink(ctx context.Context) error {
+	tc := getTC(ctx)
+	for i := tc.commentCountAtPoll; i < len(tc.githubClient.comments); i++ {
+		c := tc.githubClient.comments[i]
+		if strings.Contains(c, "View live output") && strings.Contains(c, "/ui/command-runs/") {
+			return fmt.Errorf("expected no live-output link comment, but one was posted")
+		}
+	}
+	return nil
+}
+
+func heimdallShouldNotAddEyesReaction(ctx context.Context) error {
+	tc := getTC(ctx)
+	newReactions := len(tc.githubClient.reactions) - tc.reactionCountAtPoll
+	if newReactions > 0 {
+		return fmt.Errorf("expected no new reactions, but %d were posted", newReactions)
+	}
+	return nil
+}
+
+// Command-run dashboard step implementations
+
+func commandRunExistsForAcceptedCommand(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.pr == nil {
+		if err := heimdallManagedPRExists(ctx); err != nil {
+			return err
+		}
+	}
+	if tc.config == nil {
+		if err := heimdallIsConfigured(ctx); err != nil {
+			return err
+		}
+	}
+	if tc.pr.ID == 0 {
+		return fmt.Errorf("PR must be persisted before creating a command run")
+	}
+	cr := &store.CommandRequest{
+		PullRequestID:       tc.pr.ID,
+		CommentNodeID:       "test-comment",
+		CommandName:         "refine",
+		RequestedAgent:      "gpt-5.4",
+		ActorLogin:          tc.pendingActor,
+		AuthorizationStatus: "authorized",
+		DedupeKey:           "test-dedupe",
+		Status:              "queued",
+	}
+	if err := tc.store.SaveCommandRequest(ctx, cr); err != nil {
+		return err
+	}
+	run := &store.CommandRun{
+		CommandRequestID: cr.ID,
+		Status:           "queued",
+	}
+	return tc.store.CreateCommandRun(ctx, run)
+}
+
+func commandRunHasTimelineEntries(ctx context.Context) error {
+	tc := getTC(ctx)
+	req, err := tc.store.GetCommandRequestByDedupeKey(ctx, "test-dedupe")
+	if err != nil {
+		return err
+	}
+	if req == nil {
+		return fmt.Errorf("expected command request to exist")
+	}
+	run, err := tc.store.GetCommandRunByCommandRequestID(ctx, req.ID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return fmt.Errorf("expected command run to exist")
+	}
+	for i := 1; i <= 3; i++ {
+		entry := &store.CommandTimelineEntry{
+			CommandRunID: run.ID,
+			Sequence:     i,
+			EntryType:    "text",
+			DisplayText:  fmt.Sprintf("Timeline entry %d", i),
+			CreatedAt:    time.Now(),
+		}
+		if err := tc.store.AppendTimelineEntry(ctx, entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func operatorRequestsActiveCommandRunList(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.dashboardServer == nil {
+		if err := startDashboardServer(ctx); err != nil {
+			return err
+		}
+	}
+	resp, err := http.Get(tc.dashboardServer.URL + "/ui/command-runs")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	tc.dashboardResponse = resp
+	tc.dashboardBody = string(body)
+	return nil
+}
+
+func operatorRequestsCommandRunDetailView(ctx context.Context) error {
+	tc := getTC(ctx)
+	if tc.dashboardServer == nil {
+		if err := startDashboardServer(ctx); err != nil {
+			return err
+		}
+	}
+	req, err := tc.store.GetCommandRequestByDedupeKey(ctx, "test-dedupe")
+	if err != nil {
+		return err
+	}
+	if req == nil {
+		return fmt.Errorf("expected command request to exist")
+	}
+	resp, err := http.Get(fmt.Sprintf("%s/ui/command-runs/%d", tc.dashboardServer.URL, req.ID))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	tc.dashboardResponse = resp
+	tc.dashboardBody = string(body)
+	return nil
+}
+
+func listShouldIncludeCommandRunWithStatus(ctx context.Context, status string) error {
+	tc := getTC(ctx)
+	if !strings.Contains(tc.dashboardBody, status) {
+		return fmt.Errorf("expected command run list to contain status %q", status)
+	}
+	return nil
+}
+
+func listShouldLinkToCommandRunDetail(ctx context.Context) error {
+	tc := getTC(ctx)
+	req, err := tc.store.GetCommandRequestByDedupeKey(ctx, "test-dedupe")
+	if err != nil {
+		return err
+	}
+	if req == nil {
+		return fmt.Errorf("expected command request to exist")
+	}
+	expectedLink := fmt.Sprintf("/ui/command-runs/%d", req.ID)
+	if !strings.Contains(tc.dashboardBody, expectedLink) {
+		return fmt.Errorf("expected command run list to link to detail page %q", expectedLink)
+	}
+	return nil
+}
+
+func detailViewShouldShowCommandRunStatus(ctx context.Context) error {
+	tc := getTC(ctx)
+	if !strings.Contains(tc.dashboardBody, "queued") && !strings.Contains(tc.dashboardBody, "running") && !strings.Contains(tc.dashboardBody, "completed") {
+		return fmt.Errorf("expected detail view to show command run status")
+	}
+	return nil
+}
+
+func detailViewShouldShowLiveOutputTimeline(ctx context.Context) error {
+	tc := getTC(ctx)
+	if !strings.Contains(tc.dashboardBody, "Timeline entry") {
+		return fmt.Errorf("expected detail view to show live output timeline entries")
+	}
+	return nil
+}
+
+func startDashboardServer(ctx context.Context) error {
+	tc := getTC(ctx)
+	queries := dashboard.NewQueries(tc.store.DB())
+	handler, err := dashboard.NewHandler(queries)
+	if err != nil {
+		return err
+	}
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+	tc.dashboardServer = httptest.NewServer(mux)
 	return nil
 }

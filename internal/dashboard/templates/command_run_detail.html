@@ -1,0 +1,78 @@
+{{define "command_run_detail.html"}}
+{{template "base.html" .}}
+{{end}}
+
+{{define "content"}}
+<h1>Command Run #{{.Detail.CommandRequestID}}</h1>
+
+<div class="card">
+  <p>
+    <strong>{{.Detail.CommandName}}</strong>
+    <span class="badge status-{{.Detail.Status}}">{{.Detail.Status}}</span>
+    {{if .Detail.SessionID}}<span class="muted">| Session: {{.Detail.SessionID}}</span>{{end}}
+  </p>
+  <p class="muted">
+    Repository: {{.Detail.RepoRef}} |
+    PR: <a href="/ui/pull-requests/{{.Detail.CommandRequestID}}">#{{.Detail.PRNumber}}</a> {{.Detail.PRTitle}} |
+    Actor: {{.Detail.ActorLogin}}
+  </p>
+  {{if .Detail.StatusReason}}<p class="muted">Reason: {{.Detail.StatusReason}}</p>{{end}}
+  {{if .Detail.TerminalSummary}}<p class="muted">Summary: {{.Detail.TerminalSummary}}</p>{{end}}
+  <p class="muted">
+    {{if .Detail.StartedAt}}Started: {{.Detail.StartedAt.Format "2006-01-02 15:04:05"}}{{end}}
+    {{if .Detail.CompletedAt}}| Completed: {{.Detail.CompletedAt.Format "2006-01-02 15:04:05"}}{{end}}
+  </p>
+</div>
+
+{{if .IsTerminal}}
+<div class="terminal-banner status-{{.Detail.Status}}">
+  <strong>{{.Detail.Status}}</strong>
+  {{if .Detail.TerminalSummary}}— {{.Detail.TerminalSummary}}{{end}}
+</div>
+{{end}}
+
+<h2>Live Output</h2>
+<div id="timeline-container"
+  {{if not .IsTerminal}}
+  hx-get="/ui/command-runs/{{.Detail.CommandRequestID}}/timeline"
+  hx-trigger="every 3s"
+  hx-swap="outerHTML"
+  {{end}}>
+  {{template "timeline_content" .}}
+</div>
+
+<p><a href="/ui/command-runs">← Back to command runs</a></p>
+{{end}}
+
+{{define "timeline_content"}}
+{{if .Timeline}}
+<ul class="timeline">
+  {{range .Timeline}}
+  <li class="entry-type-{{.EntryType}}">
+    <div>{{.DisplayText}}</div>
+    <div class="meta">{{.EntryType}} | {{.CreatedAt.Format "15:04:05"}}</div>
+  </li>
+  {{end}}
+</ul>
+{{if .HasMoreEntries}}
+<p><a href="/ui/command-runs/{{.Detail.CommandRequestID}}?limit={{.Limit}}&offset={{add .Offset .Limit}}">Load earlier entries</a></p>
+{{end}}
+{{else}}
+<p class="muted">No output entries yet.</p>
+{{end}}
+{{end}}
+
+{{define "command_run_detail_fragment.html"}}
+{{template "content" .}}
+{{end}}
+
+{{define "command_run_timeline_fragment.html"}}
+<div id="timeline-container"
+  {{if not .IsTerminal}}
+  hx-get="/ui/command-runs/{{.Detail.CommandRequestID}}/timeline"
+  hx-trigger="every 3s"
+  hx-swap="outerHTML"
+  {{end}}>
+  {{template "timeline_content" .}}
+</div>
+{{end}}

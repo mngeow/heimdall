@@ -29,7 +29,9 @@ The happy path for V1 is intentionally small:
 
 The user should not need a separate Heimdall UI in V1.
 
-That said, Heimdall does expose a small, read-only private operator dashboard on its existing HTTP server so operators can quickly inspect queued Linear work items, active automation pull requests, and Heimdall-tracked command/activity history without reading raw SQLite or external logs. This dashboard is server-rendered HTML with HTMX for light interactivity and is intentionally not a workflow-control surface.
+That said, Heimdall does expose a small, read-only private operator dashboard on its existing HTTP server so operators can quickly inspect queued Linear work items, active automation pull requests, Heimdall-tracked command/activity history, and live opencode command runs without reading raw SQLite or external logs. This dashboard is server-rendered HTML with HTMX for light interactivity and is intentionally not a workflow-control surface.
+
+When Heimdall accepts an opencode-backed PR command such as `/heimdall refine` or `/opsx-apply`, it immediately posts an `eyes` reaction on the comment and a follow-up PR comment with a link to the live command-run detail page in the operator dashboard. This gives users immediate acknowledgment and a direct path to observe live output.
 
 ## Ease Of Use Decisions
 

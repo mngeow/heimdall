@@ -292,12 +292,20 @@ func (c *OpenCodeClient) GetVersion(ctx context.Context) (string, error) {
 	return string(output), nil
 }
 
+// DisplayEntry represents a normalized human-readable event from an opencode run.
+type DisplayEntry struct {
+	EntryType   string
+	DisplayText string
+	Metadata    map[string]any
+}
+
 // ExecutionOutcome represents the result of a non-interactive opencode run.
 type ExecutionOutcome struct {
 	Status    string // success, needs_input, needs_permission, error
 	Summary   string
 	RequestID string // populated when Status == needs_permission
 	SessionID string // populated when Status == needs_permission
+	Timeline  []DisplayEntry
 }
 
 // opencodeEvent is a minimal JSON event shape from `opencode run --format json`.
@@ -390,6 +398,42 @@ type opencodeParseResult struct {
 	LastError string            // last observed generic error text (may be intermediate)
 	HasError  bool              // whether any generic error event was seen
 	Terminal  *ExecutionOutcome // terminal outcome if one was explicitly found
+	Timeline  []DisplayEntry
+}
+
+// normalizeOpencodeEvent maps a structured opencode event to a sanitized display entry.
+// Unknown but valid event types fall back to a compact generic status entry.
+func normalizeOpencodeEvent(ev opencodeEvent) (entryType, displayText string, metadata map[string]any) {
+	switch ev.Type {
+	case "text":
+		return "text", ev.Part.State.Output, nil
+	case "tool_use":
+		tool := ev.Part.Tool
+		status := ev.Part.State.Status
+		if tool == "permission" && status == "pending" {
+			return "blocker", "Blocked on permission request", map[string]any{"tool": tool, "status": status}
+		}
+		if tool != "" {
+			return "tool_status", fmt.Sprintf("Tool %s: %s", tool, status), map[string]any{"tool": tool, "status": status}
+		}
+		return "generic", "tool event", nil
+	case "step_start":
+		return "text", "Step started", nil
+	case "step_finish":
+		return "terminal", "Step completed", nil
+	case "permission.asked":
+		reqID := ev.Properties.RequestID
+		if reqID == "" {
+			reqID = ev.Properties.ID
+		}
+		return "blocker", "Blocked on permission request", map[string]any{"request_id": reqID}
+	case "question.asked", "input.requested":
+		return "blocker", "Blocked: needs clarification input", nil
+	case "error":
+		return "text", ev.Part.State.Output, map[string]any{"severity": "error"}
+	default:
+		return "generic", fmt.Sprintf("Event: %s", ev.Type), map[string]any{"raw_type": ev.Type}
+	}
 }
 
 func parseOpencodeEvents(r io.Reader) (*opencodeParseResult, error) {
@@ -421,6 +465,13 @@ func parseOpencodeEvents(r io.Reader) (*opencodeParseResult, error) {
 			if ev.Type == "step_start" && ev.Part.SessionID != "" {
 				res.SessionID = ev.Part.SessionID
 			}
+			// Normalize every structured event into a display entry.
+			entryType, displayText, meta := normalizeOpencodeEvent(ev)
+			res.Timeline = append(res.Timeline, DisplayEntry{
+				EntryType:   entryType,
+				DisplayText: displayText,
+				Metadata:    meta,
+			})
 			// Detect permission.asked events — immediate blocker
 			if ev.Type == "permission.asked" || (ev.Type == "tool_use" && ev.Part.Tool == "permission" && ev.Part.State.Status == "pending") {
 				reqID := ev.Properties.ID
@@ -474,10 +525,12 @@ func resolveOutcome(res *opencodeParseResult, waitErr error) *ExecutionOutcome {
 	}
 	// Blockers are terminal regardless of later events or exit code.
 	if res.Blocker != nil {
+		res.Blocker.Timeline = res.Timeline
 		return res.Blocker
 	}
 	// Terminal success from explicit completion event.
 	if res.Terminal != nil {
+		res.Terminal.Timeline = res.Timeline
 		return res.Terminal
 	}
 	// Process exited with error and no terminal success was observed.
@@ -488,25 +541,36 @@ func resolveOutcome(res *opencodeParseResult, waitErr error) *ExecutionOutcome {
 		} else if waitErr.Error() != "" {
 			summary = fmt.Sprintf("opencode exited with error: %v", waitErr)
 		}
-		return &ExecutionOutcome{Status: "error", Summary: summary, SessionID: res.SessionID}
+		return &ExecutionOutcome{Status: "error", Summary: summary, SessionID: res.SessionID, Timeline: res.Timeline}
 	}
 	// No explicit terminal event but process succeeded — default to success.
-	return &ExecutionOutcome{Status: "success", Summary: "completed", SessionID: res.SessionID}
+	return &ExecutionOutcome{Status: "success", Summary: "completed", SessionID: res.SessionID, Timeline: res.Timeline}
 }
 
 // RunGeneric runs a non-interactive generic opencode command alias and classifies the outcome.
-func (c *OpenCodeClient) RunGeneric(ctx context.Context, agent, command, prompt string) error {
-	args := []string{"run", "--agent", agent, "--command", command}
+func (c *OpenCodeClient) RunGeneric(ctx context.Context, agent, command, prompt string) (*ExecutionOutcome, error) {
+	args := []string{"run", "--agent", agent, "--command", command, "--format", "json"}
 	if prompt != "" {
 		args = append(args, prompt)
 	}
 	cmd := exec.CommandContext(ctx, "opencode", args...)
 	cmd.Dir = c.worktreePath
-	output, err := cmd.CombinedOutput()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("opencode generic command failed: %w (output: %s)", err, string(output))
+		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
-	return nil
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start opencode: %w", err)
+	}
+
+	res, parseErr := parseOpencodeEvents(stdout)
+
+	waitErr := cmd.Wait()
+	if parseErr != nil {
+		return nil, parseErr
+	}
+
+	return resolveOutcome(res, waitErr), nil
 }
 
 // ReplyPermission sends a one-time approval reply to a pending opencode permission request.

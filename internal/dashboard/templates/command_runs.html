@@ -1,0 +1,41 @@
+{{define "command_runs.html"}}
+{{template "base.html" .}}
+{{end}}
+
+{{define "content"}}
+<h1>Active Command Runs</h1>
+{{if .Rows}}
+<table>
+  <thead>
+    <tr>
+      <th>Repository</th>
+      <th>PR</th>
+      <th>Actor</th>
+      <th>Command</th>
+      <th>Status</th>
+      <th>Session</th>
+      <th>Started</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Rows}}
+    <tr>
+      <td>{{.RepoRef}}</td>
+      <td><a href="/ui/pull-requests/{{.CommandRequestID}}">#{{.PRNumber}}</a> {{.PRTitle}}</td>
+      <td>{{.ActorLogin}}</td>
+      <td><a href="/ui/command-runs/{{.CommandRequestID}}">{{.CommandName}}</a></td>
+      <td><span class="badge status-{{.Status}}">{{.Status}}</span></td>
+      <td class="muted">{{if .SessionID}}{{.SessionID}}{{else}}—{{end}}</td>
+      <td class="muted">{{if .StartedAt}}{{.StartedAt.Format "2006-01-02 15:04:05"}}{{else}}—{{end}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="muted">No active command runs.</p>
+{{end}}
+{{end}}
+
+{{define "command_runs_fragment.html"}}
+{{template "content" .}}
+{{end}}

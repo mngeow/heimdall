@@ -65,3 +65,25 @@ Feature: Private operator dashboard
       Then the response should contain an HTML fragment
       And no new workflow run should be created
       And no repository mutation should occur
+
+  Rule: Dashboard shows active command runs and live output
+
+    Scenario: Operator views active command runs
+      Given a Heimdall-managed pull request exists
+      And the repository allows agent "gpt-5.4"
+      And a command run exists for an accepted opencode-backed command
+      When the operator requests the active command-run list
+      Then the response should be a server-rendered HTML page
+      And the list should include the command run with status "queued"
+      And the list should link to the command run detail page
+
+    Scenario: Operator opens a command run detail view
+      Given a Heimdall-managed pull request exists
+      And the repository allows agent "gpt-5.4"
+      And a command run exists for an accepted opencode-backed command
+      And the command run has timeline entries
+      When the operator requests the command run detail view
+      Then the response should be a server-rendered HTML page
+      And the detail view should show the command run status
+      And the detail view should show the live output timeline
+      And the rendered page should not contain secrets or raw sensitive payloads

@@ -219,3 +219,37 @@ Feature: Pull request command handling
       When the user comments "/heimdall status"
       And Heimdall polls GitHub
       Then Heimdall should ignore the pull request because it is missing monitor label
+
+  Rule: Accepted commands receive visible GitHub acknowledgment
+
+    Scenario: Accepted opencode-backed command gets eyes reaction and live-output link
+      Given a Heimdall-managed pull request exists
+      And the repository allows agent "gpt-5.4"
+      When the user comments "/heimdall refine --agent gpt-5.4 -- Add detail"
+      And Heimdall polls GitHub
+      Then Heimdall should discover the comment during polling
+      And Heimdall should add an eyes reaction to the comment
+      And Heimdall should post a comment with a live-output dashboard link
+
+    Scenario: Accepted status command gets eyes reaction without live-output link
+      Given a Heimdall-managed pull request exists
+      When the user comments "/heimdall status"
+      And Heimdall polls GitHub
+      Then Heimdall should discover the comment during polling
+      And Heimdall should add an eyes reaction to the comment
+      And Heimdall should not post a live-output link comment
+
+    Scenario: Rejected command gets no acceptance feedback
+      Given a user not in the allowed users list
+      When they comment "/heimdall status"
+      And Heimdall polls GitHub
+      Then the command should be rejected
+      And Heimdall should not add an eyes reaction
+      And Heimdall should not post a live-output link comment
+
+    Scenario: Duplicate observation gets no duplicate feedback
+      Given a command has already been processed
+      When the same comment is observed in another GitHub poll
+      Then the duplicate should be detected
+      And Heimdall should not add an eyes reaction
+      And Heimdall should not post a live-output link comment

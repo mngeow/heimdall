@@ -100,6 +100,18 @@ func (w *PRCommandWorker) executeJob(ctx context.Context, job *store.Job) error 
 		return fmt.Errorf("repository %d not found", pr.RepositoryID)
 	}
 
+	// Create or retrieve command run for opencode-backed commands.
+	var commandRun *store.CommandRun
+	if isOpencodeJobType(job.JobType) {
+		commandRun, err = w.ensureCommandRun(ctx, req.ID)
+		if err != nil {
+			w.logger.Error("failed to ensure command run", "command_request_id", req.ID, "error", err)
+		}
+		if commandRun != nil {
+			_ = w.executor.store.UpdateCommandRunStatus(ctx, commandRun.ID, "starting", "")
+		}
+	}
+
 	if err := w.executor.store.UpdateCommandRequestStatus(ctx, req.ID, "running"); err != nil {
 		return fmt.Errorf("failed to mark command request %d as running: %w", req.ID, err)
 	}
@@ -112,6 +124,9 @@ func (w *PRCommandWorker) executeJob(ctx context.Context, job *store.Job) error 
 		Alias:            req.Alias,
 		RequestID:        req.RequestID,
 		CommandRequestID: req.ID,
+	}
+	if commandRun != nil {
+		execReq.CommandRunID = commandRun.ID
 	}
 
 	var execErr error
@@ -152,4 +167,30 @@ func (w *PRCommandWorker) executeJob(ctx context.Context, job *store.Job) error 
 	}
 
 	return nil
+}
+
+func isOpencodeJobType(jobType string) bool {
+	switch jobType {
+	case "pr_command_refine", "pr_command_apply", "pr_command_opencode":
+		return true
+	}
+	return false
+}
+
+func (w *PRCommandWorker) ensureCommandRun(ctx context.Context, commandRequestID int64) (*store.CommandRun, error) {
+	run, err := w.executor.store.GetCommandRunByCommandRequestID(ctx, commandRequestID)
+	if err != nil {
+		return nil, err
+	}
+	if run != nil {
+		return run, nil
+	}
+	run = &store.CommandRun{
+		CommandRequestID: commandRequestID,
+		Status:           "queued",
+	}
+	if err := w.executor.store.CreateCommandRun(ctx, run); err != nil {
+		return nil, err
+	}
+	return run, nil
 }

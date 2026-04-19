@@ -23,22 +23,24 @@ type PullRequest struct {
 
 // CommandRequest represents a PR comment command
 type CommandRequest struct {
-	ID                  int64
-	PullRequestID       int64
-	CommentNodeID       string
-	CommandName         string
-	CommandArgs         string
-	RequestedAgent      string
-	ActorLogin          string
-	AuthorizationStatus string
-	DedupeKey           string
-	WorkflowRunID       *int64
-	Status              string
-	ChangeName          string
-	Alias               string
-	PromptTail          string
-	RequestID           string
-	SessionID           string // opencode session identity observed from the first structured event
+	ID                     int64
+	PullRequestID          int64
+	CommentNodeID          string
+	CommandName            string
+	CommandArgs            string
+	RequestedAgent         string
+	ActorLogin             string
+	AuthorizationStatus    string
+	DedupeKey              string
+	WorkflowRunID          *int64
+	Status                 string
+	ChangeName             string
+	Alias                  string
+	PromptTail             string
+	RequestID              string
+	SessionID              string // opencode session identity observed from the first structured event
+	FeedbackReactionPosted bool
+	FeedbackLinkPosted     bool
 }
 
 // WorkflowRun represents a workflow execution
@@ -170,11 +172,12 @@ func (s *Store) SavePullRequest(ctx context.Context, pr *PullRequest) error {
 // CommandRequest operations
 func (s *Store) GetCommandRequestByDedupeKey(ctx context.Context, dedupeKey string) (*CommandRequest, error) {
 	var req CommandRequest
+	var reactionPosted, linkPosted int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status, change_name, alias, prompt_tail, request_id, session_id
+		`SELECT id, pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status, change_name, alias, prompt_tail, request_id, session_id, feedback_reaction_posted, feedback_link_posted
 		 FROM command_requests WHERE dedupe_key = ?`,
 		dedupeKey,
-	).Scan(&req.ID, &req.PullRequestID, &req.CommentNodeID, &req.CommandName, &req.CommandArgs, &req.RequestedAgent, &req.ActorLogin, &req.AuthorizationStatus, &req.DedupeKey, &req.WorkflowRunID, &req.Status, &req.ChangeName, &req.Alias, &req.PromptTail, &req.RequestID, &req.SessionID)
+	).Scan(&req.ID, &req.PullRequestID, &req.CommentNodeID, &req.CommandName, &req.CommandArgs, &req.RequestedAgent, &req.ActorLogin, &req.AuthorizationStatus, &req.DedupeKey, &req.WorkflowRunID, &req.Status, &req.ChangeName, &req.Alias, &req.PromptTail, &req.RequestID, &req.SessionID, &reactionPosted, &linkPosted)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -182,16 +185,19 @@ func (s *Store) GetCommandRequestByDedupeKey(ctx context.Context, dedupeKey stri
 	if err != nil {
 		return nil, err
 	}
+	req.FeedbackReactionPosted = reactionPosted != 0
+	req.FeedbackLinkPosted = linkPosted != 0
 	return &req, nil
 }
 
 func (s *Store) GetCommandRequestByID(ctx context.Context, requestID int64) (*CommandRequest, error) {
 	var req CommandRequest
+	var reactionPosted, linkPosted int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status, change_name, alias, prompt_tail, request_id, session_id
+		`SELECT id, pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status, change_name, alias, prompt_tail, request_id, session_id, feedback_reaction_posted, feedback_link_posted
 		 FROM command_requests WHERE id = ?`,
 		requestID,
-	).Scan(&req.ID, &req.PullRequestID, &req.CommentNodeID, &req.CommandName, &req.CommandArgs, &req.RequestedAgent, &req.ActorLogin, &req.AuthorizationStatus, &req.DedupeKey, &req.WorkflowRunID, &req.Status, &req.ChangeName, &req.Alias, &req.PromptTail, &req.RequestID, &req.SessionID)
+	).Scan(&req.ID, &req.PullRequestID, &req.CommentNodeID, &req.CommandName, &req.CommandArgs, &req.RequestedAgent, &req.ActorLogin, &req.AuthorizationStatus, &req.DedupeKey, &req.WorkflowRunID, &req.Status, &req.ChangeName, &req.Alias, &req.PromptTail, &req.RequestID, &req.SessionID, &reactionPosted, &linkPosted)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -199,18 +205,30 @@ func (s *Store) GetCommandRequestByID(ctx context.Context, requestID int64) (*Co
 	if err != nil {
 		return nil, err
 	}
+	req.FeedbackReactionPosted = reactionPosted != 0
+	req.FeedbackLinkPosted = linkPosted != 0
 	return &req, nil
 }
 
 func (s *Store) SaveCommandRequest(ctx context.Context, req *CommandRequest) error {
+	reactionPosted := 0
+	if req.FeedbackReactionPosted {
+		reactionPosted = 1
+	}
+	linkPosted := 0
+	if req.FeedbackLinkPosted {
+		linkPosted = 1
+	}
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO command_requests (pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status, change_name, alias, prompt_tail, request_id, session_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO command_requests (pull_request_id, comment_node_id, command_name, command_args, requested_agent, actor_login, authorization_status, dedupe_key, workflow_run_id, status, change_name, alias, prompt_tail, request_id, session_id, feedback_reaction_posted, feedback_link_posted)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(dedupe_key) DO UPDATE SET
 		 status = excluded.status,
 		 workflow_run_id = excluded.workflow_run_id,
-		 session_id = excluded.session_id`,
-		req.PullRequestID, req.CommentNodeID, req.CommandName, req.CommandArgs, req.RequestedAgent, req.ActorLogin, req.AuthorizationStatus, req.DedupeKey, req.WorkflowRunID, req.Status, req.ChangeName, req.Alias, req.PromptTail, req.RequestID, req.SessionID,
+		 session_id = excluded.session_id,
+		 feedback_reaction_posted = excluded.feedback_reaction_posted,
+		 feedback_link_posted = excluded.feedback_link_posted`,
+		req.PullRequestID, req.CommentNodeID, req.CommandName, req.CommandArgs, req.RequestedAgent, req.ActorLogin, req.AuthorizationStatus, req.DedupeKey, req.WorkflowRunID, req.Status, req.ChangeName, req.Alias, req.PromptTail, req.RequestID, req.SessionID, reactionPosted, linkPosted,
 	)
 	if err != nil {
 		return err
