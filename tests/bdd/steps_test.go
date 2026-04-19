@@ -119,13 +119,13 @@ func (f *fakeRepoManagerForBDD) PushBranch(_ context.Context, _, _, _, _, _ stri
 
 type fakeExecClientForBDD struct{}
 
-func (f *fakeExecClientForBDD) RunRefine(_ context.Context, _, _, _ string) (*exec.ExecutionOutcome, error) {
+func (f *fakeExecClientForBDD) RunRefine(_ context.Context, _, _, _ string, _ exec.TimelineWriter) (*exec.ExecutionOutcome, error) {
 	return &exec.ExecutionOutcome{Status: "success", Summary: "refine completed"}, nil
 }
-func (f *fakeExecClientForBDD) RunApply(_ context.Context, _, _, _ string) (*exec.ExecutionOutcome, error) {
+func (f *fakeExecClientForBDD) RunApply(_ context.Context, _, _, _ string, _ exec.TimelineWriter) (*exec.ExecutionOutcome, error) {
 	return &exec.ExecutionOutcome{Status: "success", Summary: "apply completed"}, nil
 }
-func (f *fakeExecClientForBDD) RunGeneric(_ context.Context, _, _, _ string) (*exec.ExecutionOutcome, error) {
+func (f *fakeExecClientForBDD) RunGeneric(_ context.Context, _, _, _ string, _ exec.TimelineWriter) (*exec.ExecutionOutcome, error) {
 	return &exec.ExecutionOutcome{Status: "success", Summary: "generic completed"}, nil
 }
 func (f *fakeExecClientForBDD) ReplyPermission(_ context.Context, _, _ string) error { return nil }
@@ -1696,15 +1696,40 @@ func commandRunHasTimelineEntries(ctx context.Context) error {
 	if run == nil {
 		return fmt.Errorf("expected command run to exist")
 	}
-	for i := 1; i <= 3; i++ {
-		entry := &store.CommandTimelineEntry{
+	entries := []store.CommandTimelineEntry{
+		{
 			CommandRunID: run.ID,
-			Sequence:     i,
-			EntryType:    "text",
-			DisplayText:  fmt.Sprintf("Timeline entry %d", i),
+			Sequence:     1,
+			EntryType:    "tool_use",
+			DisplayText:  "bash",
+			Metadata:     map[string]any{"tool": "bash", "status": "completed", "input": map[string]any{"command": "ls", "description": "Lists repository root files"}, "output": "add-openspec-gitkeeps.sh\nllm.txt\nopenspec\nREADME.md\n", "metadata": map[string]any{"exit": 0, "time": 3}},
 			CreatedAt:    time.Now(),
-		}
-		if err := tc.store.AppendTimelineEntry(ctx, entry); err != nil {
+		},
+		{
+			CommandRunID: run.ID,
+			Sequence:     2,
+			EntryType:    "step_start",
+			DisplayText:  "Step started",
+			CreatedAt:    time.Now(),
+		},
+		{
+			CommandRunID: run.ID,
+			Sequence:     3,
+			EntryType:    "step_finish",
+			DisplayText:  "Step completed",
+			Metadata:     map[string]any{"reason": "tool-calls", "tokens": map[string]any{"total": 9524, "input": 6843, "output": 22, "reasoning": 99}, "cost": 0.0},
+			CreatedAt:    time.Now(),
+		},
+		{
+			CommandRunID: run.ID,
+			Sequence:     4,
+			EntryType:    "text",
+			DisplayText:  "I’m creating the OpenSpec change scaffold",
+			CreatedAt:    time.Now(),
+		},
+	}
+	for i := range entries {
+		if err := tc.store.AppendTimelineEntry(ctx, &entries[i]); err != nil {
 			return err
 		}
 	}
@@ -1794,8 +1819,18 @@ func detailViewShouldShowCommandRunStatus(ctx context.Context) error {
 
 func detailViewShouldShowLiveOutputTimeline(ctx context.Context) error {
 	tc := getTC(ctx)
-	if !strings.Contains(tc.dashboardBody, "Timeline entry") {
-		return fmt.Errorf("expected detail view to show live output timeline entries")
+	// Check for rich rendered content: tool name, command, token counts
+	if !strings.Contains(tc.dashboardBody, "bash") {
+		return fmt.Errorf("expected detail view to show tool name 'bash'")
+	}
+	if !strings.Contains(tc.dashboardBody, "ls") {
+		return fmt.Errorf("expected detail view to show command 'ls'")
+	}
+	if !strings.Contains(tc.dashboardBody, "9524") {
+		return fmt.Errorf("expected detail view to show token count '9524'")
+	}
+	if !strings.Contains(tc.dashboardBody, "Step completed") {
+		return fmt.Errorf("expected detail view to show step completion")
 	}
 	return nil
 }

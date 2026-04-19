@@ -309,6 +309,11 @@ func (h *Handler) handleCommandRunDetail(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Reverse to chronological order: oldest first, newest last.
+	// This makes the timeline read top-to-bottom like terminal scrollback.
+	for i, j := 0, len(timeline)-1; i < j; i, j = i+1, j-1 {
+		timeline[i], timeline[j] = timeline[j], timeline[i]
+	}
 
 	isTerminal := detail.Status == "completed" || detail.Status == "failed" || detail.Status == "blocked"
 	data := map[string]any{
@@ -367,6 +372,11 @@ func (h *Handler) handleCommandRunTimeline(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	// Reverse to chronological order: oldest first, newest last.
+	// This makes the timeline read top-to-bottom like terminal scrollback.
+	for i, j := 0, len(timeline)-1; i < j; i, j = i+1, j-1 {
+		timeline[i], timeline[j] = timeline[j], timeline[i]
 	}
 
 	isTerminal := detail.Status == "completed" || detail.Status == "failed" || detail.Status == "blocked"

@@ -67,7 +67,7 @@ All PR-comment commands, including `/heimdall status`, follow the same execution
 7. The PR-command worker dequeues the job and loads the persisted command request, pull request, and repository by their durable stored IDs.
 8. For opencode-backed commands, the worker creates a `command_run` record with explicit state transitions: `queued` → `starting` → `running` → terminal (`completed`, `failed`, or `blocked`).
 9. The worker dispatches the job to the matching executor, executes it, and posts a PR reply if applicable.
-10. The opencode execution adapter parses the structured JSON event stream, captures the canonical `sessionID` from the first event, normalizes events into human-readable timeline entries, and persists them to the command run timeline.
+10. The opencode execution adapter parses the structured JSON event stream, captures the canonical `sessionID` from the first event, and normalizes events into rich structured display entries. **Entries are streamed to SQLite in real time via a `TimelineWriter` callback as they are parsed**, so the HTMX live tail has data to display during execution rather than only after the run completes.
 11. The worker updates the command request and job state to completed, blocked, or failed.
 12. Duplicate later poll observations of the same comment are ignored and must not produce additional outcomes or duplicate feedback.
 

@@ -106,6 +106,14 @@ Heimdall serves a small embedded dashboard from the same Go binary:
 - `/ui/command-runs` — list of active opencode-backed command runs with repository, PR, actor, status, and session context
 - `/ui/command-runs/{commandRequestID}` — detail view showing the command run status, session ID, and a live human-readable timeline. HTMX refreshes the timeline fragment while the command is non-terminal. Terminal states (`completed`, `failed`, `blocked`) are rendered prominently with status indicators and summaries.
 
+The live timeline renders rich structured cards per event type:
+- **Tool events** show the tool name, status badge, input parameters (command, pattern, file path, skill name), output preview, and execution metadata (exit code, execution time).
+- **Step events** show step start/finish indicators with token breakdowns (total, input, output, reasoning, cache read/write) and cost.
+- **Text events** render as preformatted blocks.
+- **Error events** are highlighted in red.
+
+Timeline entries are streamed to SQLite in real time as opencode emits them via a `TimelineWriter` callback, so the HTMX poll returns fresh rows during execution rather than waiting for the run to complete.
+
 The dashboard is server-rendered HTML with HTMX-driven partial updates. It is read-only and does not expose secrets, installation tokens, provider credentials, or raw payloads. Because it is served from the same HTTP listener, keep the listen address private (for example, `127.0.0.1:8080` or a local network interface) unless you intentionally want to expose it.
 
 Useful log fields:

@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -550,13 +551,14 @@ type CommandTimelineRow struct {
 	Sequence    int
 	EntryType   string
 	DisplayText string
+	Metadata    map[string]any
 	CreatedAt   time.Time
 }
 
 // CommandTimeline returns ordered timeline entries for a command run, bounded by limit and offset.
 func (q *Queries) CommandTimeline(ctx context.Context, commandRunID int64, limit, offset int) ([]CommandTimelineRow, error) {
 	rows, err := q.db.QueryContext(ctx,
-		`SELECT sequence, entry_type, display_text, created_at
+		`SELECT sequence, entry_type, display_text, metadata_json, created_at
 		 FROM command_timeline_entries
 		 WHERE command_run_id = ?
 		 ORDER BY sequence DESC
@@ -571,8 +573,15 @@ func (q *Queries) CommandTimeline(ctx context.Context, commandRunID int64, limit
 	var entries []CommandTimelineRow
 	for rows.Next() {
 		var e CommandTimelineRow
-		if err := rows.Scan(&e.Sequence, &e.EntryType, &e.DisplayText, &e.CreatedAt); err != nil {
+		var metaJSON string
+		if err := rows.Scan(&e.Sequence, &e.EntryType, &e.DisplayText, &metaJSON, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("command timeline scan failed: %w", err)
+		}
+		if metaJSON != "" && metaJSON != "{}" {
+			_ = json.Unmarshal([]byte(metaJSON), &e.Metadata)
+		}
+		if e.Metadata == nil {
+			e.Metadata = make(map[string]any)
 		}
 		entries = append(entries, e)
 	}

@@ -56,11 +56,41 @@ type prCommandOpenSpecClient interface {
 
 type prCommandExecClient interface {
 	SetWorktreePath(string)
-	RunRefine(ctx context.Context, agent, changeName, prompt string) (*exec.ExecutionOutcome, error)
-	RunApply(ctx context.Context, agent, changeName, prompt string) (*exec.ExecutionOutcome, error)
-	RunGeneric(ctx context.Context, agent, command, prompt string) (*exec.ExecutionOutcome, error)
+	RunRefine(ctx context.Context, agent, changeName, prompt string, writer exec.TimelineWriter) (*exec.ExecutionOutcome, error)
+	RunApply(ctx context.Context, agent, changeName, prompt string, writer exec.TimelineWriter) (*exec.ExecutionOutcome, error)
+	RunGeneric(ctx context.Context, agent, command, prompt string, writer exec.TimelineWriter) (*exec.ExecutionOutcome, error)
 	ReplyPermission(ctx context.Context, requestID, sessionID string) error
 	ResumeSession(ctx context.Context, sessionID string) (*exec.ExecutionOutcome, error)
+}
+
+// storeTimelineWriter writes display entries to the SQLite store in real time.
+type storeTimelineWriter struct {
+	store        *store.Store
+	commandRunID int64
+	seq          int
+}
+
+func newStoreTimelineWriter(s *store.Store, commandRunID int64) *storeTimelineWriter {
+	return &storeTimelineWriter{store: s, commandRunID: commandRunID, seq: 1}
+}
+
+func (w *storeTimelineWriter) WriteEntry(entryType, displayText string, metadata map[string]any) error {
+	if w.commandRunID == 0 {
+		return nil
+	}
+	entry := &store.CommandTimelineEntry{
+		CommandRunID: w.commandRunID,
+		Sequence:     w.seq,
+		EntryType:    entryType,
+		DisplayText:  displayText,
+		Metadata:     metadata,
+		CreatedAt:    time.Now(),
+	}
+	if err := w.store.AppendTimelineEntry(context.Background(), entry); err != nil {
+		return err
+	}
+	w.seq++
+	return nil
 }
 
 // NewPRCommandExecutor creates a new PR command executor.
@@ -184,7 +214,12 @@ func (e *PRCommandExecutor) ExecuteRefine(ctx context.Context, req ExecutionRequ
 		_ = e.store.UpdateCommandRunStatus(ctx, req.CommandRunID, "running", "")
 	}
 
-	outcome, err := e.exec.RunRefine(ctx, req.Agent, changeName, req.PromptTail)
+	var writer exec.TimelineWriter
+	if req.CommandRunID != 0 {
+		writer = newStoreTimelineWriter(e.store, req.CommandRunID)
+	}
+
+	outcome, err := e.exec.RunRefine(ctx, req.Agent, changeName, req.PromptTail, writer)
 	if err != nil {
 		if req.CommandRunID != 0 {
 			_ = e.store.CompleteCommandRun(ctx, req.CommandRunID, "failed", err.Error())
@@ -204,7 +239,6 @@ func (e *PRCommandExecutor) ExecuteRefine(ctx context.Context, req ExecutionRequ
 		if outcome.SessionID != "" {
 			_ = e.store.UpdateCommandRunSessionID(ctx, req.CommandRunID, outcome.SessionID)
 		}
-		e.persistTimeline(ctx, req.CommandRunID, outcome.Timeline)
 		status := outcome.Status
 		if status == "success" {
 			status = "completed"
@@ -255,7 +289,12 @@ func (e *PRCommandExecutor) ExecuteApply(ctx context.Context, req ExecutionReque
 		_ = e.store.UpdateCommandRunStatus(ctx, req.CommandRunID, "running", "")
 	}
 
-	outcome, err := e.exec.RunApply(ctx, req.Agent, changeName, req.PromptTail)
+	var writer exec.TimelineWriter
+	if req.CommandRunID != 0 {
+		writer = newStoreTimelineWriter(e.store, req.CommandRunID)
+	}
+
+	outcome, err := e.exec.RunApply(ctx, req.Agent, changeName, req.PromptTail, writer)
 	if err != nil {
 		if req.CommandRunID != 0 {
 			_ = e.store.CompleteCommandRun(ctx, req.CommandRunID, "failed", err.Error())
@@ -275,7 +314,6 @@ func (e *PRCommandExecutor) ExecuteApply(ctx context.Context, req ExecutionReque
 		if outcome.SessionID != "" {
 			_ = e.store.UpdateCommandRunSessionID(ctx, req.CommandRunID, outcome.SessionID)
 		}
-		e.persistTimeline(ctx, req.CommandRunID, outcome.Timeline)
 		status := outcome.Status
 		if status == "success" {
 			status = "completed"
@@ -326,7 +364,12 @@ func (e *PRCommandExecutor) ExecuteOpencode(ctx context.Context, req ExecutionRe
 		_ = e.store.UpdateCommandRunStatus(ctx, req.CommandRunID, "running", "")
 	}
 
-	outcome, err := e.exec.RunGeneric(ctx, req.Agent, req.Alias, req.PromptTail)
+	var writer exec.TimelineWriter
+	if req.CommandRunID != 0 {
+		writer = newStoreTimelineWriter(e.store, req.CommandRunID)
+	}
+
+	outcome, err := e.exec.RunGeneric(ctx, req.Agent, req.Alias, req.PromptTail, writer)
 	if err != nil {
 		if req.CommandRunID != 0 {
 			_ = e.store.CompleteCommandRun(ctx, req.CommandRunID, "failed", err.Error())
@@ -341,7 +384,6 @@ func (e *PRCommandExecutor) ExecuteOpencode(ctx context.Context, req ExecutionRe
 		}
 	}
 	if req.CommandRunID != 0 {
-		e.persistTimeline(ctx, req.CommandRunID, outcome.Timeline)
 		status := outcome.Status
 		if status == "success" {
 			status = "completed"
