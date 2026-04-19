@@ -229,3 +229,12 @@ type SpecExecutor interface {
 ```
 
 These interfaces are intentionally small so Linear, Jira, local CLI execution, and future remote execution can be swapped with minimal churn.
+
+## Related Documentation
+
+For deeper dives into specific runtime mechanics, see:
+
+- `docs/runtime-state.md` — State machines and status transitions for every durable artifact (workflow runs, command runs, command requests, jobs, repo bindings, and work item lifecycle buckets)
+- `docs/github-polling.md` — How the GitHub poller discovers comments and state changes across multiple repositories and pull requests in a single poll cycle
+- `docs/worker-execution.md` — Worker boot sequence, job dequeue semantics, lock-key concurrency, retry behavior, and the full PR comment intake pipeline from discovery to execution
+- `docs/database/schema.md` — SQLite table definitions, ERD, and constraints including command runs, timeline entries, and pending permission requests

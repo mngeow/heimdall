@@ -73,6 +73,8 @@ All PR-comment commands, including `/heimdall status`, follow the same execution
 
 This model keeps polling fast and deterministic while executing commands asynchronously through a single background worker loop.
 
+See `docs/worker-execution.md` for the full intake pipeline, dequeue semantics, lock keys, and retry behavior. See `docs/runtime-state.md` for the complete state machines of jobs, command requests, and command runs.
+
 ## Workflow 3: Refine Specs From A PR Comment
 
 Refinement is an artifact-only operation. It should update OpenSpec files but not apply implementation tasks.

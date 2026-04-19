@@ -15,6 +15,8 @@ SQLite stores:
 - repo bindings and pull requests
 - slash-command requests
 - async jobs and audit events
+- opencode command runs and timeline entries
+- pending permission requests
 
 ## Mermaid ERD
 
@@ -37,6 +39,9 @@ erDiagram
     COMMAND_REQUESTS ||--o| WORKFLOW_RUNS : triggers
     COMMAND_REQUESTS ||--o{ JOBS : schedules
     COMMAND_REQUESTS ||--o{ AUDIT_EVENTS : records
+    COMMAND_REQUESTS ||--o| COMMAND_RUNS : tracks
+    COMMAND_REQUESTS ||--o{ PENDING_PERMISSION_REQUESTS : blocks
+    COMMAND_RUNS ||--o{ COMMAND_TIMELINE_ENTRIES : streams
 
     PROVIDER_CURSORS {
         integer id PK
@@ -176,6 +181,39 @@ erDiagram
         text summary
         datetime occurred_at
     }
+
+    COMMAND_RUNS {
+        integer id PK
+        integer command_request_id FK UK
+        text session_id
+        text status
+        text status_reason
+        text terminal_summary
+        datetime started_at
+        datetime completed_at
+    }
+
+    COMMAND_TIMELINE_ENTRIES {
+        integer id PK
+        integer command_run_id FK
+        integer sequence
+        text entry_type
+        text display_text
+        text metadata_json
+        datetime created_at
+    }
+
+    PENDING_PERMISSION_REQUESTS {
+        integer id PK
+        text request_id UK
+        text session_id
+        integer command_request_id FK
+        integer pull_request_id FK
+        integer repository_id FK
+        text status
+        datetime created_at
+        datetime resolved_at
+    }
 ```
 
 ## Table Roles
@@ -233,6 +271,24 @@ Recommended lock-key shapes:
 
 Stores append-only audit records that answer who requested a change, which agent ran, which commit was created, and whether the action succeeded.
 
+### `command_runs`
+
+Tracks the live execution state of opencode-backed PR commands (`refine`, `apply`, `opencode`).
+
+Provides the state machine (`queued` → `starting` → `running` → terminal) and the canonical `session_id` observed from the first structured opencode event. One run exists per accepted opencode-backed command request.
+
+### `command_timeline_entries`
+
+Stores ordered, human-readable display entries for the operator dashboard live tail.
+
+Each entry represents one normalized event from the opencode JSON stream (text, tool status, blocker, error, etc.). Entries append in observed stream order (`sequence ASC`) and are queried by the dashboard for real-time display.
+
+### `pending_permission_requests`
+
+Stores blocked opencode permission requests so they can survive process restarts and be approved later via `/heimdall approve <request-id>`.
+
+The record links the exact permission request ID, the opencode session identity, the originating command request, and the pull request context. Only real machine-readable permission events with non-empty identifiers are persisted.
+
 ## Important Constraints
 
 - `work_item_events.idempotency_key` must be unique
@@ -240,6 +296,9 @@ Stores append-only audit records that answer who requested a change, which agent
 - `command_requests.comment_node_id` must be unique
 - `repo_bindings(work_item_id, repository_id)` should be unique
 - `pull_requests(repository_id, number)` should be unique
+- `command_runs.command_request_id` must be unique (one run per request)
+- `command_timeline_entries(command_run_id, sequence)` must be unique
+- `pending_permission_requests.request_id` must be unique
 
 ## What Does Not Belong In SQLite
 

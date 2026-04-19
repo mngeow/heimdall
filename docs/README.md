@@ -42,6 +42,9 @@ Linear and GitHub PR command intake are both polling-based in V1, so the standar
 - `setup/linux-host.md`: Linux host dependencies and server preparation checklist
 - `database/README.md`: database design overview
 - `database/schema.md`: SQLite schema notes and Mermaid ERD
+- `runtime-state.md`: state machines and status transitions for all durable artifacts
+- `github-polling.md`: multi-repository PR polling strategy, checkpoints, and comment discovery
+- `worker-execution.md`: worker boot, job dequeue, lock keys, retry behavior, and PR comment intake pipeline
 
 ## Design Principles
 
