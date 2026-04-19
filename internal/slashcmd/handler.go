@@ -83,17 +83,46 @@ func (p *Parser) Parse(comment string) *Command {
 	// Preserve multiline prompt tail after the first standalone "--"
 	// on the command line, or when the command line ends with "--"
 	// and the prompt continues on later lines.
+	var promptParts []string
 	if idx := strings.Index(commandLine, " -- "); idx != -1 {
-		cmd.PromptTail = strings.TrimSpace(commandLine[idx+4:])
-	} else if strings.HasSuffix(commandLine, " --") {
-		// Prompt continues on subsequent lines
+		promptParts = append(promptParts, strings.TrimSpace(commandLine[idx+4:]))
+	}
+	if strings.HasSuffix(commandLine, " --") || strings.Index(commandLine, " -- ") != -1 {
+		// Prompt may continue on subsequent lines
 		if commandLineIndex+1 < len(lines) {
 			promptLines := lines[commandLineIndex+1:]
-			cmd.PromptTail = strings.TrimSpace(strings.Join(promptLines, "\n"))
+			promptParts = append(promptParts, strings.Join(promptLines, "\n"))
 		}
+	}
+	if len(promptParts) > 0 {
+		cmd.PromptTail = strings.TrimSpace(strings.Join(promptParts, "\n"))
+		cmd.PromptTail = stripCR(cmd.PromptTail)
+		cmd.PromptTail = stripBacktickBlock(cmd.PromptTail)
 	}
 
 	return cmd
+}
+
+// stripCR removes carriage returns from each line in a multiline string.
+func stripCR(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimSuffix(line, "\r")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// stripBacktickBlock trims an outer triple-backtick wrapper from a prompt.
+// It handles blocks that start and end with ``` on their own lines or as
+// the exact string boundary, removing surrounding whitespace/newlines.
+func stripBacktickBlock(s string) string {
+	s = strings.TrimSpace(s)
+	// Case 1: ``` on its own line at start and end
+	if strings.HasPrefix(s, "```") && strings.HasSuffix(s, "```") {
+		inner := strings.TrimSpace(s[3 : len(s)-3])
+		return inner
+	}
+	return s
 }
 
 func (p *Parser) parseHeimdallCommand(line string) *Command {

@@ -51,6 +51,21 @@ The execution runtime MUST use the repository's configured default spec-writing 
 - **THEN** Heimdall preserves that later text as the prompt tail for the same refine run
 - **AND** it passes the preserved prompt body into the refinement execution instead of truncating it at the first newline
 
+#### Scenario: User runs refine with a mixed inline and multiline prompt body
+- **WHEN** a pull request comment requests `/heimdall refine --agent claude-sonnet -- Perfect, now add for me:` on one line and additional prompt text continues on later lines
+- **THEN** Heimdall preserves both the inline text after `--` and all subsequent lines as the prompt tail for the same refine run
+- **AND** it passes the combined prompt body into the refinement execution instead of silently discarding the later lines
+
+#### Scenario: User runs refine with a triple-backtick delimited prompt
+- **WHEN** a pull request comment requests `/heimdall refine --agent claude-sonnet --` followed by a prompt wrapped in triple backticks
+- **THEN** Heimdall strips the outer triple backticks and surrounding whitespace and passes only the inner content as the prompt tail
+- **AND** it passes that inner content into the refinement execution
+
+#### Scenario: Multiline prompt with CRLF line endings is normalized
+- **WHEN** a pull request comment body contains CRLF (`\r\n`) line endings and the refine command uses a multiline prompt after a trailing `--`
+- **THEN** Heimdall normalizes the prompt tail to use LF-only line endings by stripping `\r` characters during reassembly
+- **AND** it passes the normalized prompt body into the refinement execution without embedded carriage returns
+
 #### Scenario: User runs a PR command without an allowed agent
 - **WHEN** a pull request comment requests `/heimdall refine`, `/heimdall apply`, `/opsx-apply`, or `/heimdall opencode` with an agent that is not allowed for the repository
 - **THEN** Heimdall does not start the requested execution

@@ -105,6 +105,30 @@ func TestParser(t *testing.T) {
 			wantPrompt:     "",
 			wantChangeName: "",
 		},
+		{
+			name:           "mixed inline and multiline prompt",
+			comment:        "/heimdall refine --agent gpt-5.4 -- Perfect, now add for me:\n1. duckduckgo search tool\n2. Some tool to print a random string",
+			wantPrompt:     "Perfect, now add for me:\n1. duckduckgo search tool\n2. Some tool to print a random string",
+			wantChangeName: "",
+		},
+		{
+			name:           "triple backtick wrapped prompt",
+			comment:        "/heimdall refine --agent gpt-5.4 -- \n```\nAdd error handling\n```",
+			wantPrompt:     "Add error handling",
+			wantChangeName: "",
+		},
+		{
+			name:           "CRLF line endings normalized",
+			comment:        "/heimdall refine --agent gpt-5.4 --\r\nGood. But I also want:\r\n1. duckduckgo\r\n2. fastapi",
+			wantPrompt:     "Good. But I also want:\n1. duckduckgo\n2. fastapi",
+			wantChangeName: "",
+		},
+		{
+			name:           "trailing inline separator with no subsequent lines",
+			comment:        "/heimdall refine --agent gpt-5.4 -- Add error handling",
+			wantPrompt:     "Add error handling",
+			wantChangeName: "",
+		},
 	}
 
 	for _, tt := range tests {

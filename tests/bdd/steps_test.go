@@ -293,6 +293,10 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^Heimdall should comment that the alias is not authorized$`, heimdallShouldCommentAliasNotAuthorized)
 	sc.Step(`^the user comments a multiline refine command with trailing separator$`, userCommentsMultilineRefine)
 	sc.Step(`^Heimdall should update the proposal artifacts using the full prompt body$`, heimdallShouldUpdateArtifactsWithFullPrompt)
+	sc.Step(`^the user comments a multiline refine command with inline separator$`, theUserCommentsAMultilineRefineWithInlineSeparator)
+	sc.Step(`^Heimdall should preserve the full prompt tail$`, heimdallShouldPreserveTheFullPromptTail)
+	sc.Step(`^the user comments a refine command with triple backtick prompt$`, theUserCommentsATripleBacktickRefine)
+	sc.Step(`^Heimdall should strip backticks and preserve inner content$`, heimdallShouldStripBackticksAndPreserveInnerContent)
 	sc.Step(`^a Heimdall-managed pull request exists with no active changes$`, heimdallManagedPRExistsWithNoActiveChanges)
 	sc.Step(`^Heimdall should reject the command because no active change could be resolved$`, heimdallShouldRejectNoActiveChange)
 	sc.Step(`^the opencode run blocks on clarification input$`, opencodeRunBlocksOnClarification)
@@ -1191,6 +1195,78 @@ func userCommentsMultilineRefine(ctx context.Context) error {
 }
 
 func heimdallShouldUpdateArtifactsWithFullPrompt(ctx context.Context) error {
+	tc := getTC(ctx)
+	req, err := tc.store.GetCommandRequestByDedupeKey(ctx, slashcmd.CommandDedupeKey("comment-1"))
+	if err != nil {
+		return err
+	}
+	if req == nil {
+		return fmt.Errorf("expected command request to exist")
+	}
+	want := "Good. But I also want you to include the following:\n1. duckduckgo search tool\n2. Expose this agent via a simple fastapi application"
+	if req.PromptTail != want {
+		return fmt.Errorf("PromptTail = %q, want %q", req.PromptTail, want)
+	}
+	return nil
+}
+
+func theUserCommentsAMultilineRefineWithInlineSeparator(ctx context.Context) error {
+	tc := getTC(ctx)
+	comment := "/heimdall refine --agent gpt-5.4 -- Perfect, now add for me:\n1. duckduckgo search tool\n2. Some tool to print a random string"
+	tc.command = comment
+	tc.pendingComment = comment
+	tc.pendingCommentID = "comment-1"
+	tc.pendingActor = "testuser"
+	tc.pollObserved = false
+	tc.workflowQueued = false
+	tc.duplicateSeen = false
+	tc.lastPollResult = nil
+	return nil
+}
+
+func heimdallShouldPreserveTheFullPromptTail(ctx context.Context) error {
+	tc := getTC(ctx)
+	req, err := tc.store.GetCommandRequestByDedupeKey(ctx, slashcmd.CommandDedupeKey("comment-1"))
+	if err != nil {
+		return err
+	}
+	if req == nil {
+		return fmt.Errorf("expected command request to exist")
+	}
+	want := "Perfect, now add for me:\n1. duckduckgo search tool\n2. Some tool to print a random string"
+	if req.PromptTail != want {
+		return fmt.Errorf("PromptTail = %q, want %q", req.PromptTail, want)
+	}
+	return nil
+}
+
+func theUserCommentsATripleBacktickRefine(ctx context.Context) error {
+	tc := getTC(ctx)
+	comment := "/heimdall refine --agent gpt-5.4 --\n```\nPerfect, now add for me:\n1. duckduckgo search tool\n2. Some tool to print a random string\n```"
+	tc.command = comment
+	tc.pendingComment = comment
+	tc.pendingCommentID = "comment-1"
+	tc.pendingActor = "testuser"
+	tc.pollObserved = false
+	tc.workflowQueued = false
+	tc.duplicateSeen = false
+	tc.lastPollResult = nil
+	return nil
+}
+
+func heimdallShouldStripBackticksAndPreserveInnerContent(ctx context.Context) error {
+	tc := getTC(ctx)
+	req, err := tc.store.GetCommandRequestByDedupeKey(ctx, slashcmd.CommandDedupeKey("comment-1"))
+	if err != nil {
+		return err
+	}
+	if req == nil {
+		return fmt.Errorf("expected command request to exist")
+	}
+	want := "Perfect, now add for me:\n1. duckduckgo search tool\n2. Some tool to print a random string"
+	if req.PromptTail != want {
+		return fmt.Errorf("PromptTail = %q, want %q", req.PromptTail, want)
+	}
 	return nil
 }
 
