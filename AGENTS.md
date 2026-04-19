@@ -14,6 +14,9 @@ Built with: Go application code (planned), OpenSpec `spec-driven` workflow, loca
 - Design for future Jira-style expansion through adapter seams, not by leaking Linear-specific semantics into the core.
 - Use MermaidJS for any diagrams in docs, specs, or design artifacts. Do not introduce ASCII diagrams when a diagram is needed.
 
+## Configuration & Environment
+- Any new configuration variable introduced to the codebase MUST be added to `@dist.env` with a descriptive example value. This ensures the distributed environment template stays complete and operators can discover all available settings from a single source.
+
 ## Documentation & Resources
 - Start with `docs/README.md`, then read the relevant files in `docs/` before making design or architecture changes.
 - Product and workflow expectations are documented in:
