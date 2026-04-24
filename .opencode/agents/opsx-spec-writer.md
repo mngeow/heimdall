@@ -1,7 +1,7 @@
 ---
 description: Creates OpenSpec change artifacts for /opsx-propose and gets them ready for /opsx-apply
 mode: primary
-model: kimi-for-coding/K2.6-code-preview
+model: openai/gpt-5.5
 temperature: 0.2
 permission:
   edit: allow

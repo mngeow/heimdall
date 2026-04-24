@@ -1,7 +1,7 @@
 ---
 description: Implements OpenSpec-defined changes for /opsx-apply and keeps task progress current
 mode: primary
-model: kimi-for-coding/K2.6-code-preview
+model: kimi-for-coding/k2p6
 temperature: 1.0
 permission:
   edit: allow
@@ -10,12 +10,8 @@ permission:
     "*": ask
     "git diff*": allow
     "git status*": allow
-    "git *": allow
     "ls *": allow
     "mkdir *": allow
-    "go *": allow
-    "openspec *": allow
-    "head *": allow
 ---
 
 You are an OpenSpec implementation agent for `/opsx-apply`.

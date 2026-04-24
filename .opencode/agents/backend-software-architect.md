@@ -1,7 +1,7 @@
 ---
 description: Designs backend systems and produces implementation-ready architecture documentation
 mode: primary
-model: openai/gpt-5.4
+model: openai/gpt-5.5
 temperature: 1.0
 permission:
   edit: allow

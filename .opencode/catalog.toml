@@ -10,8 +10,8 @@ description = "Designs backend systems and produces implementation-ready archite
 mode = "primary"
 source_rel_path = "backend-software-architect.md"
 installed_rel_path = "agents/backend-software-architect.md"
-source_hash = "sha256:b5ed7c3ffedc82100f721cc898e2731a184e1103847827c2aef191704d1f1f23"
-installed_hash = "sha256:b5ed7c3ffedc82100f721cc898e2731a184e1103847827c2aef191704d1f1f23"
+source_hash = "sha256:10bac038568d8203753d08c7e9093b2e376ac480d3fd9d924175b51269a9d27b"
+installed_hash = "sha256:10bac038568d8203753d08c7e9093b2e376ac480d3fd9d924175b51269a9d27b"
 
 [[agents]]
 name = "opsx-code-writer"
@@ -19,8 +19,8 @@ description = "Implements OpenSpec-defined changes for /opsx-apply and keeps tas
 mode = "primary"
 source_rel_path = "opsx-code-writer.md"
 installed_rel_path = "agents/opsx-code-writer.md"
-source_hash = "sha256:8763a7cf6c305b2aaf73942f700107d9718c4750282f46871dd56c005ba97cdd"
-installed_hash = "sha256:8763a7cf6c305b2aaf73942f700107d9718c4750282f46871dd56c005ba97cdd"
+source_hash = "sha256:5484593b04d273c89b5ddfecdce5bdbaaacdc43919881aff116df681833f1e80"
+installed_hash = "sha256:5484593b04d273c89b5ddfecdce5bdbaaacdc43919881aff116df681833f1e80"
 
 [[agents]]
 name = "opsx-spec-writer"
@@ -28,8 +28,8 @@ description = "Creates OpenSpec change artifacts for /opsx-propose and gets them
 mode = "primary"
 source_rel_path = "opsx-spec-writer.md"
 installed_rel_path = "agents/opsx-spec-writer.md"
-source_hash = "sha256:c5b5cf483750feb0fd49af5591fa652b5d44cf379d526e7f56db8fd8577ff406"
-installed_hash = "sha256:c5b5cf483750feb0fd49af5591fa652b5d44cf379d526e7f56db8fd8577ff406"
+source_hash = "sha256:fd81616284cd6e803c3292072d26af5bac411a0f8771e52dc343e9f9dce3ac0a"
+installed_hash = "sha256:fd81616284cd6e803c3292072d26af5bac411a0f8771e52dc343e9f9dce3ac0a"
 
 [[commands]]
 name = "done"
